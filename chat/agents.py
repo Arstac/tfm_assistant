@@ -169,6 +169,30 @@ def generate_chart(chart_type: str, x_column: str, y_column: str = None) -> dict
             "name": f"{x_column} vs {y_column}"
         }
 
+    elif chart_type == "box":
+        if y_column is None:
+            return {"error": "Se requiere una columna Y para gráficos de caja."}
+        x_data = df[x_column].dropna()
+        y_data = df[y_column].dropna()
+        chart_data = {
+            "x": x_data.tolist(),
+            "y": y_data.tolist(),
+            "type": "box",
+            "name": f"{x_column} vs {y_column}"
+        }
+        
+    elif chart_type == "bar":
+        if y_column is None:
+            return {"error": "Se requiere una columna Y para gráficos de barras."}
+        x_data = df[x_column].dropna()
+        y_data = df[y_column].dropna()
+        chart_data = {
+            "x": x_data.tolist(),
+            "y": y_data.tolist(),
+            "type": "bar",
+            "name": f"{x_column} vs {y_column}"
+        }
+        
     else:
         return {"error": f"Tipo de gráfico no soportado: {chart_type}"}
 
