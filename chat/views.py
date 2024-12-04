@@ -235,23 +235,36 @@ def chatbot_api(request):
 
     if not user_message:
         return Response({'error': 'No message provided'}, status=status.HTTP_400_BAD_REQUEST)
-
+    
+    chart_type = request.data.get('chart_type', 'scatter')  # Por defecto, dispersión
+    x_column = request.data.get('x_column')
+    y_column = request.data.get('y_column')
     # Aquí puedes manejar el historial de mensajes si es necesario
     # Para este ejemplo, simplemente enviamos el mensaje al modelo y obtenemos una respuesta
 
     #response = llm.invoke(user_message)
-    response = app.invoke({"messages":[HumanMessage(content=user_message)]}, config=config)
+    response = app.invoke({"messages":[HumanMessage(content=user_message)],
+                            "chart_type": chart_type,
+                            "x_column": x_column,
+                            "y_column": y_column
+                        }, config=config)
     ai_message = response["messages"][-1].content
     tool_msg = response["messages"][-2].content
     print("AI Response:", ai_message)
     print("Tool Message:", tool_msg)
-    # Identifica si el mensaje es un ToolMessage con un path a una imagen
-    if tool_msg.startswith("/static/"):
-        print("Tool Message is an image path")
-        return Response({'response': tool_msg, 'type': 'image'}, status=status.HTTP_200_OK)
+    
+    if_tool_msg_dict = isinstance(tool_msg, dict)
+    print("Is Tool Message a dictionary?", if_tool_msg_dict)
+    
+    is_chart_in_tool_msg = 'chart_data' in tool_msg
+    print("Is there a chart in Tool Message?", is_chart_in_tool_msg)
+    # si tool_msg es un diccionario y hay "chart_data" en él, entonces es un gráfico    
+    if  is_chart_in_tool_msg:
+        print("Tool Message is a chart")
+        return Response({'response': tool_msg, 'type': 'chart'}, status=status.HTTP_200_OK)
     else:
+        print("Tool Message is a text")
         return Response({'response': ai_message, 'type': 'text'}, status=status.HTTP_200_OK)
-
 
 @api_view(['POST'])
 def predict_view(request):

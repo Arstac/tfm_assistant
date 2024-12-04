@@ -53,7 +53,7 @@ def save_image_to_file(base64_content, file_path=None):
 @tool
 def generate_histogram(column_name: str) -> str:
     """
-    Genera un histograma de la columna especificada en el dataframe y retorna la imagen codificada en base64.
+    Genera un histograma de la columna especificada en el dataframe y retorna el path de la imagen codificada en base64.
     """
     import matplotlib
     import matplotlib.pyplot as plt
@@ -80,19 +80,18 @@ def generate_histogram(column_name: str) -> str:
     print("Histogram image encoded successfully.")
     
     img_path = save_image_to_file(image_base64)
-
+    
+    print("Image saved to: ", img_path)
     return img_path
 
 ################################################################
 # CSV AGENT AS TOOL
 ################################################################
+
 custom_suffix = """Instrucciones adicionales:
-- Usa siempre este fragmento de codigo: 
-    import matplotlib
-    matplotlib.use('agg')
-- Al generar gráficos con Matplotlib, no utilices plt.show(). En su lugar, guarda el gráfico en un buffer en memoria y retorna el gráfico codificado en base64.
-- Proporciona el string base64 del gráfico en tu respuesta, indicando claramente que es una imagen codificada.
-"""
+Las columnas del dataframe son: 
+{dfcolumns}"""
+custom_suffix = custom_suffix.format(dfcolumns=df.columns)
 
 agent = create_pandas_dataframe_agent(
     ChatOpenAI(temperature=0, model="gpt-4o-mini", api_key=api_key),
@@ -100,12 +99,82 @@ agent = create_pandas_dataframe_agent(
     verbose=True,
     agent_type=AgentType.OPENAI_FUNCTIONS,
     allow_dangerous_code=True,
+    suffix=custom_suffix,
+    include_df_in_prompt=True,
 )
 
 csv_agent_as_tool = agent.as_tool(
     name="csv_agent",
     description="Agent for csv file",
 )
+
+################################################################
+# Generate chart tool
+################################################################
+
+
+@tool
+def generate_chart(chart_type: str, x_column: str, y_column: str = None) -> dict:
+    """
+    Genera gráficos basados en el tipo solicitado (histograma, dispersión, líneas, etc.) y las columnas especificadas.
+    Retorna un diccionario con los datos para un gráfico interactivo.
+    
+    Parámetros:
+    - chart_type: Tipo de gráfico ('histogram', 'scatter', 'line', etc.).
+    - x_column: Columna del eje X.
+    - y_column: Columna del eje Y (opcional, para gráficos como dispersión o líneas).
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    print(f"Generating {chart_type} for columns: {x_column} {f'vs {y_column}' if y_column else ''}")
+
+    if x_column not in df.columns or (y_column and y_column not in df.columns):
+        return {"error": f"Las columnas especificadas no existen: {x_column}, {y_column}"}
+
+    chart_data = {}
+
+    if chart_type == "histogram":
+        data = df[x_column].dropna()
+        counts, bins = np.histogram(data, bins=30)
+        chart_data = {
+            "x": bins[:-1].tolist(),
+            "y": counts.tolist(),
+            "type": "bar",
+            "name": f"Histograma de {x_column}"
+        }
+
+    elif chart_type == "scatter":
+        if y_column is None:
+            return {"error": "Se requiere una columna Y para gráficos de dispersión."}
+        x_data = df[x_column].dropna()
+        y_data = df[y_column].dropna()
+        chart_data = {
+            "x": x_data.tolist(),
+            "y": y_data.tolist(),
+            "type": "scatter",
+            "mode": "markers",
+            "name": f"{x_column} vs {y_column}"
+        }
+
+    elif chart_type == "line":
+        if y_column is None:
+            return {"error": "Se requiere una columna Y para gráficos de líneas."}
+        x_data = df[x_column].dropna()
+        y_data = df[y_column].dropna()
+        chart_data = {
+            "x": x_data.tolist(),
+            "y": y_data.tolist(),
+            "type": "line",
+            "name": f"{x_column} vs {y_column}"
+        }
+
+    else:
+        return {"error": f"Tipo de gráfico no soportado: {chart_type}"}
+
+    print(f"{chart_type} data generated successfully.")
+    return {"chart_data": chart_data, "title": f"{chart_type.capitalize()} de {x_column} {f'vs {y_column}' if y_column else ''}"}
+
 
 ################################################################
 # PREDICT PRESUPUESTO REAL API
@@ -141,7 +210,7 @@ def api_predict(features) -> float:
 # Initialize the language model with the specified model name
 llm = ChatOpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY)
 
-tools = [api_predict, csv_agent_as_tool, generate_histogram]
+tools = [api_predict, csv_agent_as_tool, generate_chart]
 
 
 ################################################################
@@ -154,6 +223,7 @@ def chat(state: State):
     """
     system = """Eres un asistente virtual especializado en la gestión de proyectos de construcción. 
 Tu propósito principal es ofrecer soporte inteligente a una empresa mediante la consulta de datos históricos de obras ejecutadas, la estimación de riesgos y desviaciones en presupuestos, y la recomendación de estrategias para optimizar la planificación y minimizar riesgos.
+Los datos se encuentran en el archivo: o2.csv.
 
 Dispones de una serie de funciones que puedes utilizar para resolver ciertas tareas:
 Herramientas del Asistente:
@@ -165,7 +235,7 @@ Herramientas del Asistente:
         Return: [presupuesto_adjudicacion, plazo_entrega_real, plazo_entrega_adjudicacion] (eje: [1000000, 12, 10])
  
     2- csv_agent: agente para interactuar con un archivo csv. Puedes utilizarlo para realizar consultas.
-    3- generate_histogram: función que genera un histograma de una columna específica en el dataframe y retorna la imagen codificada en base64.
+    3- generate_chart: función que genera un gráfico interactivo basado en los datos del archivo csv. 
     
  Interacción:
 	1.	Entrada del Usuario:
@@ -214,11 +284,15 @@ Herramientas del Asistente:
     chain = prompt | llm.bind_tools(tools)
     
     print("--------- ENTERTING CHAT NODE ---------")
-    print("Messages received: ", state["messages"])
+    #print("Messages received: ", state["messages"])
     print("--------- ------------------ ---------")
-    # Generate a response using the language model
-    response = chain.invoke({"messages": state["messages"]})
     
+    # Get 2 last messages
+    last_messages = state["messages"]
+    # Generate a response using the language model
+    response = chain.invoke({"messages": last_messages})
+    
+    print("Response: ", response)
     # Return the response to the user
     return {"messages":response}
 
@@ -230,11 +304,13 @@ Herramientas del Asistente:
 def need_tool(state: State):
     messages = state["messages"]
     last_message = messages[-1]
-    print("last_message: ", last_message, "\n\n")
+    #print("last_message: ", last_message, "\n\n")
     # If there is no function call, then we respond to the user
     if last_message.tool_calls:
+        print("Tool call detected.")
         return "tool"
     else:
+        print("No tool call detected.")
         return "end"
     
 graph = StateGraph(State)
