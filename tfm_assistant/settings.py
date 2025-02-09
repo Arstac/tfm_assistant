@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'rest_framework', #specified that we are using rest framework
     'rest_framework.authtoken', #used for token authentication
     'chat', #added name of our new app
+    'ai_generation_document',
     'authentication', #for registering users and providing tokens
     'corsheaders',
 ]

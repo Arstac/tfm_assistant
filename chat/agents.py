@@ -103,7 +103,7 @@ agent = create_pandas_dataframe_agent(
     include_df_in_prompt=True,
 )
 
-csv_agent_as_tool = agent.as_tool(
+s = agent.as_tool(
     name="csv_agent",
     description="Agent for csv file",
 )
@@ -244,7 +244,7 @@ BASE_URL = "http://localhost:8000/predict/"  # Base URL para las predicciones
 
 # ========================== 1️⃣ PREDICCIÓN DEL COSTO FINAL ==========================
 @tool
-def api_predict_costo_final(features) -> float:
+def api_predict_final_price(features) -> float:
     """
     Predice el Costo Final de un proyecto de construcción.
     """
@@ -255,7 +255,7 @@ def api_predict_costo_final(features) -> float:
 
 # ========================== 2️⃣ PREDICCIÓN DE DURACIÓN REAL ==========================
 @tool
-def api_predict_duracion_real(features) -> float:
+def api_predict_customer_satisfaction(features) -> float:
     """
     Predice la Duración Real de un proyecto de construcción.
     """
@@ -265,7 +265,7 @@ def api_predict_duracion_real(features) -> float:
 
 # ========================== 3️⃣ PREDICCIÓN DE SATISFACCIÓN DEL CLIENTE ==========================
 @tool
-def api_predict_satisfaccion_cliente(features) -> float:
+def api_predict_customer_satisfaction(features) -> float:
     """
     Predice la Satisfacción del Cliente en un proyecto de construcción.
     """
@@ -274,7 +274,7 @@ def api_predict_satisfaccion_cliente(features) -> float:
 
 # ========================== 4️⃣ PREDICCIÓN DE DESVIACIÓN PRESUPUESTARIA ==========================
 @tool
-def api_predict_desviacion_presupuestaria(features) -> float:
+def api_predict_budget_deviation(features) -> float:
     """
     Predice la Desviación Presupuestaria en un proyecto de construcción.
     """
@@ -308,7 +308,7 @@ def call_prediction_api(url, features):
 # # Initialize the language model with the specified model name
 llm = ChatOpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY)
 
-tools = [api_predict_costo_final, api_predict_duracion_real, api_predict_satisfaccion_cliente, api_predict_desviacion_presupuestaria, call_prediction_api, csv_agent_as_tool, generate_chart]
+tools = [api_predict_final_price, api_predict_customer_satisfaction, api_predict_customer_satisfaction, api_predict_budget_deviation, call_prediction_api, generate_chart]
 
 
 ################################################################

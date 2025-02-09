@@ -17,6 +17,28 @@ from langchain.chains import ConversationChain  # Chain to handle conversational
 
 from .agents import app, config
 from .models import ChatMessage, Conversation  # Importing the ChatMessage and Conversation models
+from rest_framework.response import Response
+from .ml_model import (
+    predict_costo_final,
+    predict_duracion_real,
+    predict_satisfaccion_cliente,
+    predict_desviacion_presupuestaria
+)
+
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.views import APIView
+from rest_framework.parsers import MultiPartParser, FormParser
+import os
+import pandas as pd
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser
+from .utils.extract import extract_text_from_pdf, enhanced_segmenter, extract_data_with_regex
+from .utils.bert_qa import BERTQA  # Asumiendo que tienes esta clase en utils
+
+
 
 # API details for the title generator (using a Hugging Face model)
 API_URL = "https://api-inference.huggingface.co/models/czearing/article-title-generator"
@@ -224,9 +246,6 @@ def get_data(request):
         # If no title is provided, return an error message
         return JsonResponse({'error': 'Title not provided'}, status=400)
     
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from rest_framework import status
 
 @api_view(['POST'])
 def chatbot_api(request):
@@ -287,40 +306,22 @@ def predict_view(request):
 
     return JsonResponse({'error': 'Only POST method is allowed.'}, status=405)
 
-
-from rest_framework.response import Response
-from rest_framework.decorators import api_view
-from .ml_model import (
-    predict_costo_final,
-    predict_duracion_real,
-    predict_satisfaccion_cliente,
-    predict_desviacion_presupuestaria
-)
-
 @api_view(["POST"])
-# @authentication_classes([TokenAuthentication])
-# @permission_classes([IsAuthenticated])
 def predict_costo_final_view(request):
     """API para predecir el Costo Final."""
     return _handle_prediction(request, predict_costo_final, "Costo_Final")
 
 @api_view(["POST"])
-# @authentication_classes([TokenAuthentication])
-# @permission_classes([IsAuthenticated])
 def predict_duracion_real_view(request):
     """API para predecir la Duración Real."""
     return _handle_prediction(request, predict_duracion_real, "Duracion_Real")
 
 @api_view(["POST"])
-# @authentication_classes([TokenAuthentication])
-# @permission_classes([IsAuthenticated])
 def predict_satisfaccion_cliente_view(request):
     """API para predecir la Satisfacción del Cliente."""
     return _handle_prediction(request, predict_satisfaccion_cliente, "Satisfaccion_Cliente")
 
 @api_view(["POST"])
-# @authentication_classes([TokenAuthentication])
-# @permission_classes([IsAuthenticated])
 def predict_desviacion_presupuestaria_view(request):
     """API para predecir la Desviación Presupuestaria."""
     return _handle_prediction(request, predict_desviacion_presupuestaria, "Desviacion_Presupuestaria")
@@ -339,3 +340,90 @@ def _handle_prediction(request, prediction_function, variable_name):
 
     except Exception as e:
         return Response({"error": str(e)}, status=500)
+
+class UploadPDFView(APIView):
+    parser_classes = (MultiPartParser, FormParser)
+
+    def post(self, request, *args, **kwargs):
+        # 1. Obtener y guardar el archivo PDF
+        pdf_file = request.FILES.get('file')
+        if not pdf_file:
+            return Response({"error": "No se subió ningún archivo."}, status=400)
+
+        temp_file_path = f"/tmp/{pdf_file.name}"
+        with open(temp_file_path, 'wb') as temp_file:
+            for chunk in pdf_file.chunks():
+                temp_file.write(chunk)
+
+        try:
+            # 2. Extraer texto del PDF
+            pdf_text = extract_text_from_pdf(temp_file_path)
+            if not pdf_text:
+                return Response({"error": "No se pudo extraer texto del PDF."}, status=400)
+
+            # 3. Segmentar el texto en secciones clave
+            sections = enhanced_segmenter(pdf_text)
+
+            # 4. Extracción estructurada con regex
+            regex_data = extract_data_with_regex(pdf_text)
+
+            # 5. Cargar modelo BERT
+            try:
+                bert_qa = BERTQA(use_finetuned=True)
+            except Exception as e:
+                bert_qa = BERTQA(use_finetuned=False)
+
+            # 6. Preguntas clave con contexto optimizado
+            questions = {
+                "valor_estimado_bert": {
+                    "pregunta": "¿Cuál es el valor estimado exacto del contrato en euros?",
+                    "contexto": sections.get("objeto_contrato", pdf_text)
+                },
+                "plazo_ejecucion_bert": {
+                    "pregunta": "¿Cuál es el plazo total de ejecución en meses?",
+                    "contexto": sections.get("condiciones", pdf_text)
+                },
+                "clasificacion_cpv": {
+                    "pregunta": "¿Cuál es el código CPV completo de la clasificación?",
+                    "contexto": sections.get("proceso", pdf_text)
+                }
+            }
+
+            # 7. Procesar preguntas con BERT
+            bert_responses = {}
+            for key, config in questions.items():
+                answer = bert_qa.answer(
+                    context=config["contexto"],
+                    question=config["pregunta"]
+                )
+                bert_responses[key] = {
+                    "respuesta": answer.get("answer", "No encontrado"),
+                    "confianza": f"{answer.get('score', 0):.1%}" if 'score' in answer else "N/A"
+                }
+
+            # 8. Consolidar datos
+            final_data = {
+                **regex_data,
+                "valor_bert": bert_responses["valor_estimado_bert"]["respuesta"],
+                "plazo_bert": bert_responses["plazo_ejecucion_bert"]["respuesta"],
+                "cpv_bert": bert_responses["clasificacion_cpv"]["respuesta"]
+            }
+
+            # 9. Guardar resultados en un archivo CSV
+            os.makedirs("output", exist_ok=True)
+            df = pd.DataFrame([final_data])
+            csv_path = f"output/{pdf_file.name}_analizada.csv"
+            df.to_csv(csv_path, index=False)
+
+            return Response({
+                "message": "Datos extraídos correctamente.",
+                # "data": final_data,
+                # "csv_path": csv_path
+            }, status=200)
+
+        except Exception as e:
+            return Response({"error": f"Hubo un problema al procesar el archivo: {str(e)}"}, status=500)
+
+        finally:
+            # 10. Eliminar archivo temporal
+            os.remove(temp_file_path)

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Evaluación de Viabilidad del Proyecto</title>
+    <script>
+        async function evaluarViabilidad() {
+            const data = {
+                desviacion_coste: parseFloat(document.getElementById("desviacion_coste").value),
+                desviacion_tiempo: parseFloat(document.getElementById("desviacion_tiempo").value),
+                Indice_Riesgo: parseFloat(document.getElementById("Indice_Riesgo").value),
+                Experiencia_Contratista: parseFloat(document.getElementById("Experiencia_Contratista").value),
+                Zona_Sismica: parseFloat(document.getElementById("Zona_Sismica").value),
+                Tipo_Suelo: parseFloat(document.getElementById("Tipo_Suelo").value),
+                Disponibilidad_Materiales_Actual: parseFloat(document.getElementById("Disponibilidad_Materiales_Actual").value),
+                Turnos_Trabajo_Actual: parseInt(document.getElementById("Turnos_Trabajo_Actual").value)
+            };
+
+            const response = await fetch("/api/evaluate_feasibility/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(data)
+            });
+            
+            const result = await response.json();
+            document.getElementById("resultado").innerText = "Viabilidad: " + result.viabilidad + "\nRiesgo: " + result.riesgo;
+        }
+    </script>
+</head>
+<body>
+    <h1>Evaluación de Viabilidad del Proyecto</h1>
+    <label>Desviación Coste: <input type="number" id="desviacion_coste" step="0.01"></label><br>
+    <label>Desviación Tiempo: <input type="number" id="desviacion_tiempo" step="0.01"></label><br>
+    <label>Índice de Riesgo: <input type="number" id="Indice_Riesgo" step="0.01"></label><br>
+    <label>Experiencia Contratista: <input type="number" id="Experiencia_Contratista" step="0.01"></label><br>
+    <label>Zona Sísmica: <input type="number" id="Zona_Sismica" step="0.01"></label><br>
+    <label>Tipo de Suelo: <input type="number" id="Tipo_Suelo" step="0.01"></label><br>
+    <label>Disponibilidad de Materiales: <input type="number" id="Disponibilidad_Materiales_Actual" step="0.01"></label><br>
+    <label>Turnos de Trabajo: <input type="number" id="Turnos_Trabajo_Actual"></label><br>
+    <button onclick="evaluarViabilidad()">Evaluar Viabilidad</button>
+    <h2 id="resultado"></h2>
+</body>
+</html>
