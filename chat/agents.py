@@ -32,9 +32,11 @@ df = pd.read_csv('o2.csv', delimiter=',')
 
 import io
 import base64
+
 ################################################################
 # HISTOGRAM TOOL
 ################################################################
+
 import uuid
 
 def save_image_to_file(base64_content, file_path=None):
