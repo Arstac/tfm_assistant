@@ -429,3 +429,82 @@ memory = MemorySaver()
 app = graph.compile(checkpointer=memory)
 
 ################################################################
+
+
+from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain.chains import LLMChain
+import openai
+from jinja2 import Environment, FileSystemLoader
+
+def analizar_viabilidad(state):
+    """
+    Función que analiza la viabilidad de un proyecto de construcción 
+    utilizando un modelo de lenguaje basado en IA y genera un informe en HTML.
+    """
+
+    system = """Eres un asistente virtual experto en análisis de viabilidad de proyectos de construcción. 
+Tu tarea es evaluar la viabilidad basándote en las características del proyecto y los riesgos identificados. 
+
+Los datos que tienes incluyen:
+- Viabilidad del proyecto (Viable / No Viable)
+- Desviación en costos y tiempos.
+- Nivel de riesgo (Alto / Moderado / Bajo).
+- Factores como zona sísmica, tipo de suelo, disponibilidad de materiales y experiencia del contratista.
+
+Tu respuesta debe:
+1. Analizar la viabilidad del proyecto basándote en los datos proporcionados.
+2. Explicar por qué el proyecto es viable o no, con referencia a los factores clave.
+3. Proporcionar recomendaciones prácticas para mejorar la viabilidad del proyecto.
+4. Ofrecer comparaciones con proyectos similares en base a riesgos y costos.
+
+Formato de Respuesta Esperado:
+- Un resumen de la evaluación del proyecto.
+- Factores que afectan la viabilidad.
+- Sugerencias concretas para mejorar la planificación.
+- Si aplica, ejemplos de casos similares y cómo se resolvieron.
+"""
+
+    # Generamos el prompt con el contexto del sistema y los últimos mensajes
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", system),
+            MessagesPlaceholder(variable_name="messages"),
+        ]
+    )
+
+    # Cadena que conecta el prompt con el modelo de lenguaje
+    # chain = prompt | LLMChain(llm=openai.ChatCompletion.create)
+    chain = prompt | llm.bind_tools(tools)
+
+
+    print("--------- ENTRANDO EN ANALISIS VIABILIDAD ---------")
+    print("Mensajes recibidos: ", state["messages"])
+    print("--------- --------------------------------- ---------")
+    
+
+    # Obtener los últimos mensajes del usuario
+    # last_messages = state["messages"]
+    last_messages = [
+    {"role": "system", "content": system},
+    {"role": "user", "content": f"Viabilidad: {state['messages'][0]['viabilidad']}, "
+                                 f"Desviación en coste: {state['messages'][0]['desviacion_coste']}, "
+                                 f"Desviación en tiempo: {state['messages'][0]['desviacion_tiempo']}, "
+                                 f"Riesgo: {state['messages'][0]['riesgo']}"}
+    ]
+
+    # Generar una respuesta usando el modelo de IA
+    response = chain.invoke({"messages": last_messages})
+
+    print("Respuesta generada: ", response)
+
+    # Cargar la plantilla HTML para generar el informe
+    env = Environment(loader=FileSystemLoader('.'))
+    template = env.get_template("informe_template.html")
+
+    # Renderizar el HTML con los datos de la respuesta
+    html_output = template.render(
+        titulo="Informe de Viabilidad del Proyecto",
+        contenido=response
+    )
+
+    return html_output

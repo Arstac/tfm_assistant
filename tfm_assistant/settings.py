@@ -14,7 +14,7 @@ from pathlib import Path
 import os
 #replace it with your api key 
 #get a token: https://platform.openai.com/account/api-keys
-OPENAI_API_KEY="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"
+OPENAI_API_KEY="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"
 #os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'rest_framework.authtoken', #used for token authentication
     'chat', #added name of our new app
     'ai_generation_document',
+    'extract_from_documents',
     'authentication', #for registering users and providing tokens
     'corsheaders',
 ]

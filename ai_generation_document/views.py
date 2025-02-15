@@ -120,28 +120,65 @@ def project_dashboard(request):
     }
     return render(request, "dashboard.html", context)
 
+from chat.agents import analizar_viabilidad
+from django.http import JsonResponse, FileResponse
+import os
+import pdfplumber
+import pandas as pd
+from weasyprint import HTML
+
+
 def evaluate_feasibility(request):
     if request.method == "POST":
+
         try:
-            modelo_viabilidad = joblib.load("modelo_viabilidad.pkl")
-            data = json.loads(request.body)
+        
+            MODEL_PATH = os.path.join(os.path.dirname(__file__), 'modelo_viabilidad.pkl')
+            modelo_viabilidad = joblib.load(MODEL_PATH)
+
+            pdf_file = request.FILES.get("file")
+            if not pdf_file:
+                return JsonResponse({"error": "No se subió ningún archivo."}, status=400)
+            # data = json.loads(request.body)
             
+            with pdfplumber.open(pdf_file) as pdf:
+                text = ""
+                for page in pdf.pages:
+                    text += page.extract_text() or ""
+
+            # Aquí parseas el texto para extraer las características
+            data = {
+                "desviacion_coste": 0.05,  # Extraído del texto
+                "desviacion_tiempo": 0.1,
+                "Indice_Riesgo": 0.8,
+                "Experiencia_Contratista": 5,
+                "Zona_Sismica": 1,
+                "Tipo_Suelo": 2,
+                "Disponibilidad_Materiales_Actual": 0.9,
+                "Turnos_Trabajo_Actual": 2
+            }
+
             # Extraer características relevantes para la predicción
-            features = np.array([
+            features = pd.DataFrame([[
                 data["desviacion_coste"],
                 data["desviacion_tiempo"],
                 data["Indice_Riesgo"],
                 data["Experiencia_Contratista"],
-                data["Zona_Sismica"],
-                data["Tipo_Suelo"],
-                data["Disponibilidad_Materiales_Actual"],
                 data["Turnos_Trabajo_Actual"]
-            ]).reshape(1, -1)
-            
+            ]], columns=[
+                "desviacion_coste",
+                "desviacion_tiempo",
+                "Indice_Riesgo",
+                "Experiencia_Contratista",
+                "Turnos_Trabajo_Actual"
+            ])
+
+            print(modelo_viabilidad.feature_names_in_)
+
             # Hacer la predicción con el modelo
             viabilidad_predicha = modelo_viabilidad.predict(features)[0]
             riesgo = "Alto" if data["Indice_Riesgo"] > 0.7 else "Moderado"
-            
+
             # Construir la respuesta
             response = {
                 "viabilidad": "Viable" if viabilidad_predicha == 1 else "No Viable",
@@ -149,24 +186,23 @@ def evaluate_feasibility(request):
                 "desviacion_tiempo": data["desviacion_tiempo"],
                 "riesgo": riesgo
             }
-            
+        
             env = Environment(loader=FileSystemLoader('.'))
 
-            # Generar informe PDF automáticamente
-            template = env.get_template("informe_template.html")
-            html_output = template.render(
-                proyecto=data.get("proyecto", "Proyecto Desconocido"),
-                coste_total=data["importe_presupuestado"],
-                duracion=data["duracion_planificada"],
-                riesgos=[riesgo],
-                viabilidad=response["viabilidad"],
-                conclusion="Revisión recomendada debido a riesgos elevados." if riesgo == "Alto" else "Proyecto viable con consideraciones estándar."
-            )
-            
+            # Llamar a la IA para obtener un análisis más detallado
+            html_analysis = analizar_viabilidad({"messages": [response]})
+
+            # Generar el PDF
             pdf_path = "informe_viabilidad.pdf"
-            pdfkit.from_string(html_output, pdf_path)
+            try:
+                HTML(string=html_analysis).write_pdf(pdf_path)
+            except Exception as e:
+                print("❌ Error al generar PDF:", str(e))
+                return JsonResponse({"error": str(e)}, status=500)
             
-            return JsonResponse(response, status=200)
+            # Retornar el PDF como archivo descargable
+            return FileResponse(open(pdf_path, 'rb'), content_type='application/pdf')
+
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=400)
     else:
