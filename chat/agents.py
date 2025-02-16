@@ -16,6 +16,13 @@ from langgraph.graph import StateGraph, START, END,MessagesState
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import ToolNode
 from langchain_core.tools import tool
+from langchain_core.messages import HumanMessage
+import markdown
+
+from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain.chains import LLMChain
+import openai
+from jinja2 import Environment, FileSystemLoader
 
 
 # Define the state class
@@ -242,7 +249,6 @@ HEADERS = {
 }
 BASE_URL = "http://localhost:8000/predict/"  # Base URL para las predicciones
 
-# ========================== 1️⃣ PREDICCIÓN DEL COSTO FINAL ==========================
 @tool
 def api_predict_final_price(features) -> float:
     """
@@ -253,7 +259,6 @@ def api_predict_final_price(features) -> float:
     url = f"{BASE_URL}costo_final/"
     return call_prediction_api(url, features)
 
-# ========================== 2️⃣ PREDICCIÓN DE DURACIÓN REAL ==========================
 @tool
 def api_predict_customer_satisfaction(features) -> float:
     """
@@ -263,7 +268,6 @@ def api_predict_customer_satisfaction(features) -> float:
     url = f"{BASE_URL}duracion_real/"
     return call_prediction_api(url, features)
 
-# ========================== 3️⃣ PREDICCIÓN DE SATISFACCIÓN DEL CLIENTE ==========================
 @tool
 def api_predict_customer_satisfaction(features) -> float:
     """
@@ -272,7 +276,6 @@ def api_predict_customer_satisfaction(features) -> float:
     url = f"{BASE_URL}satisfaccion_cliente/"
     return call_prediction_api(url, features)
 
-# ========================== 4️⃣ PREDICCIÓN DE DESVIACIÓN PRESUPUESTARIA ==========================
 @tool
 def api_predict_budget_deviation(features) -> float:
     """
@@ -281,7 +284,6 @@ def api_predict_budget_deviation(features) -> float:
     url = f"{BASE_URL}desviacion_presupuestaria/"
     return call_prediction_api(url, features)
 
-# ========================== FUNCIÓN AUXILIAR PARA LLAMAR A LA API ==========================
 def call_prediction_api(url, features):
     """
     Realiza la llamada a la API de predicción y maneja errores.
@@ -382,7 +384,7 @@ Herramientas del Asistente:
     chain = prompt | llm.bind_tools(tools)
     
     print("--------- ENTERTING CHAT NODE ---------")
-    #print("Messages received: ", state["messages"])
+    print("Messages received: ", state["messages"])
     print("--------- ------------------ ---------")
     
     # Get 2 last messages
@@ -394,6 +396,85 @@ Herramientas del Asistente:
     # Return the response to the user
     return {"messages":response}
 
+def chat_feasibility(state):
+    """
+    Función que analiza la viabilidad de un proyecto de construcción 
+    utilizando un modelo de lenguaje basado en IA y genera un informe en HTML.
+    """
+
+    system = """Eres un asistente virtual experto en análisis de viabilidad de proyectos de construcción. 
+Tu tarea es evaluar la viabilidad basándote en las características del proyecto y los riesgos identificados. 
+
+Los datos que tienes incluyen:
+- Viabilidad del proyecto (Viable / No Viable)
+- Desviación en costos y tiempos.
+- Nivel de riesgo (Alto / Moderado / Bajo).
+- Factores como zona sísmica, tipo de suelo, disponibilidad de materiales y experiencia del contratista.
+
+Tu respuesta debe:
+1. Analizar la viabilidad del proyecto basándote en los datos proporcionados.
+2. Explicar por qué el proyecto es viable o no, con referencia a los factores clave.
+3. Proporcionar recomendaciones prácticas para mejorar la viabilidad del proyecto.
+4. Ofrecer comparaciones con proyectos similares en base a riesgos y costos.
+5. Generar graficos sobre los resultados y exponerlos
+
+Formato de Respuesta Esperado:
+- Un resumen de la evaluación del proyecto.
+- Factores que afectan la viabilidad.
+- Sugerencias concretas para mejorar la planificación.
+- Si aplica, ejemplos de casos similares y cómo se resolvieron.
+- Generacion de graficos sobre 
+"""
+
+    # Generamos el prompt con el contexto del sistema y los últimos mensajes
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", system),
+            MessagesPlaceholder(variable_name="messages"),
+        ]
+    )
+
+    # Cadena que conecta el prompt con el modelo de lenguaje
+    chain = prompt | llm.bind_tools(tools)
+
+
+    print("--------- ENTRANDO EN ANALISIS VIABILIDAD ---------")
+    print("Mensajes recibidos: ", state["messages"])
+    print("--------- --------------------------------- ---------")
+    
+    # Obtener los últimos mensajes del usuario
+    last_messages = {
+        'viabilidad': 'Viable',
+        'desviacion_coste': 0.05,
+        'desviacion_tiempo': 0.1,
+        'riesgo': 'Alto'
+    }
+    last_messages = ["'viabilidad': 'Viable','desviacion_coste': 0.05,'desviacion_tiempo': 0.1,'riesgo': 'Alto'"]
+
+    # Generar una respuesta usando el modelo de IA
+    try:
+        
+        response = chain.invoke({"messages": last_messages})
+    except Exception as e:
+        print(f"Error al invocar el modelo de lenguaje: {e}")
+        return "Ocurrió un error al generar la respuesta del modelo de lenguaje."
+
+    print("Respuesta generada: ", response)
+
+    # Cargar la plantilla HTML para generar el informe
+    env = Environment(loader=FileSystemLoader('.'))
+    template = env.get_template("templates/informe_template.html")
+
+    html_content = markdown.markdown(response.content)
+    print("ALMAGRO", html_content)
+    # Renderizar el HTML con los datos de la respuesta
+    html_output = template.render(
+        titulo="Informe de Viabilidad del Proyecto",
+        contenido=html_content
+    )
+
+    return html_output
+
 
 ################################################################
 # GRAPH
@@ -402,7 +483,6 @@ Herramientas del Asistente:
 def need_tool(state: State):
     messages = state["messages"]
     last_message = messages[-1]
-    #print("last_message: ", last_message, "\n\n")
     # If there is no function call, then we respond to the user
     if last_message.tool_calls:
         print("Tool call detected.")
@@ -429,82 +509,3 @@ memory = MemorySaver()
 app = graph.compile(checkpointer=memory)
 
 ################################################################
-
-
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.chains import LLMChain
-import openai
-from jinja2 import Environment, FileSystemLoader
-
-def analizar_viabilidad(state):
-    """
-    Función que analiza la viabilidad de un proyecto de construcción 
-    utilizando un modelo de lenguaje basado en IA y genera un informe en HTML.
-    """
-
-    system = """Eres un asistente virtual experto en análisis de viabilidad de proyectos de construcción. 
-Tu tarea es evaluar la viabilidad basándote en las características del proyecto y los riesgos identificados. 
-
-Los datos que tienes incluyen:
-- Viabilidad del proyecto (Viable / No Viable)
-- Desviación en costos y tiempos.
-- Nivel de riesgo (Alto / Moderado / Bajo).
-- Factores como zona sísmica, tipo de suelo, disponibilidad de materiales y experiencia del contratista.
-
-Tu respuesta debe:
-1. Analizar la viabilidad del proyecto basándote en los datos proporcionados.
-2. Explicar por qué el proyecto es viable o no, con referencia a los factores clave.
-3. Proporcionar recomendaciones prácticas para mejorar la viabilidad del proyecto.
-4. Ofrecer comparaciones con proyectos similares en base a riesgos y costos.
-
-Formato de Respuesta Esperado:
-- Un resumen de la evaluación del proyecto.
-- Factores que afectan la viabilidad.
-- Sugerencias concretas para mejorar la planificación.
-- Si aplica, ejemplos de casos similares y cómo se resolvieron.
-"""
-
-    # Generamos el prompt con el contexto del sistema y los últimos mensajes
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", system),
-            MessagesPlaceholder(variable_name="messages"),
-        ]
-    )
-
-    # Cadena que conecta el prompt con el modelo de lenguaje
-    # chain = prompt | LLMChain(llm=openai.ChatCompletion.create)
-    chain = prompt | llm.bind_tools(tools)
-
-
-    print("--------- ENTRANDO EN ANALISIS VIABILIDAD ---------")
-    print("Mensajes recibidos: ", state["messages"])
-    print("--------- --------------------------------- ---------")
-    
-
-    # Obtener los últimos mensajes del usuario
-    # last_messages = state["messages"]
-    last_messages = [
-    {"role": "system", "content": system},
-    {"role": "user", "content": f"Viabilidad: {state['messages'][0]['viabilidad']}, "
-                                 f"Desviación en coste: {state['messages'][0]['desviacion_coste']}, "
-                                 f"Desviación en tiempo: {state['messages'][0]['desviacion_tiempo']}, "
-                                 f"Riesgo: {state['messages'][0]['riesgo']}"}
-    ]
-
-    # Generar una respuesta usando el modelo de IA
-    response = chain.invoke({"messages": last_messages})
-
-    print("Respuesta generada: ", response)
-
-    # Cargar la plantilla HTML para generar el informe
-    env = Environment(loader=FileSystemLoader('.'))
-    template = env.get_template("informe_template.html")
-
-    # Renderizar el HTML con los datos de la respuesta
-    html_output = template.render(
-        titulo="Informe de Viabilidad del Proyecto",
-        contenido=response
-    )
-
-    return html_output

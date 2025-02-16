@@ -10,5 +10,5 @@ urlpatterns = [
     path('integrate-predictions-report/', integrate_predictions_to_report, name='integrate_predictions_report'),
     path('integrate-predictions-budget/', integrate_predictions_to_budget, name='integrate_predictions_budget'),
     path('dashboard/', project_dashboard, name='project_dashboard'),
-    path('api/evaluate_feasibility/', evaluate_feasibility, name='evaluar_viabilidad'),
+    path('evaluate_feasibility/', evaluate_feasibility, name='evaluate_feasibility'),
 ]

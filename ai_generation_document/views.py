@@ -8,6 +8,12 @@ import json
 import numpy as np
 import joblib
 from jinja2 import Environment, FileSystemLoader
+from chat.agents import chat_feasibility, app, config
+from django.http import JsonResponse, FileResponse
+import os
+import pdfplumber
+import pandas as pd
+from weasyprint import HTML
 
 
 def generate_report(request):
@@ -120,19 +126,11 @@ def project_dashboard(request):
     }
     return render(request, "dashboard.html", context)
 
-from chat.agents import analizar_viabilidad
-from django.http import JsonResponse, FileResponse
-import os
-import pdfplumber
-import pandas as pd
-from weasyprint import HTML
-
 
 def evaluate_feasibility(request):
     if request.method == "POST":
 
         try:
-        
             MODEL_PATH = os.path.join(os.path.dirname(__file__), 'modelo_viabilidad.pkl')
             modelo_viabilidad = joblib.load(MODEL_PATH)
 
@@ -179,7 +177,6 @@ def evaluate_feasibility(request):
             viabilidad_predicha = modelo_viabilidad.predict(features)[0]
             riesgo = "Alto" if data["Indice_Riesgo"] > 0.7 else "Moderado"
 
-            # Construir la respuesta
             response = {
                 "viabilidad": "Viable" if viabilidad_predicha == 1 else "No Viable",
                 "desviacion_coste": data["desviacion_coste"],
@@ -188,19 +185,16 @@ def evaluate_feasibility(request):
             }
         
             env = Environment(loader=FileSystemLoader('.'))
-
-            # Llamar a la IA para obtener un análisis más detallado
-            html_analysis = analizar_viabilidad({"messages": [response]})
+            html_analysis = chat_feasibility({"messages": [response]})
 
             # Generar el PDF
             pdf_path = "informe_viabilidad.pdf"
             try:
                 HTML(string=html_analysis).write_pdf(pdf_path)
             except Exception as e:
-                print("❌ Error al generar PDF:", str(e))
+                print("Error al generar PDF:", str(e))
                 return JsonResponse({"error": str(e)}, status=500)
-            
-            # Retornar el PDF como archivo descargable
+           
             return FileResponse(open(pdf_path, 'rb'), content_type='application/pdf')
 
         except Exception as e:

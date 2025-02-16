@@ -11,7 +11,7 @@ urlpatterns = [
     path('chat/delete/', views.delete_conversation),
     path('chat/get-titles', views.get_title),
     path('chat/get-data/', views.get_data),
-    path('api/chatbot/', chatbot_api, name='chatbot_api'),
+    path('chatbot/', chatbot_api, name='chatbot_api'),
     path('predict/', predict_view, name='predict'),
     path("predict/costo_final/", predict_costo_final_view, name="predict_costo_final"),
     path("predict/duracion_real/", predict_duracion_real_view, name="predict_duracion_real"),

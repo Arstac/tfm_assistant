@@ -15,7 +15,7 @@
                 Turnos_Trabajo_Actual: parseInt(document.getElementById("Turnos_Trabajo_Actual").value)
             };
 
-            const response = await fetch("/api/evaluate_feasibility/", {
+            const response = await fetch("/evaluate_feasibility/", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(data)
