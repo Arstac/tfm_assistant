@@ -131,58 +131,80 @@ def evaluate_feasibility(request):
     if request.method == "POST":
 
         try:
-            MODEL_PATH = os.path.join(os.path.dirname(__file__), 'modelo_viabilidad.pkl')
-            modelo_viabilidad = joblib.load(MODEL_PATH)
-
+            MODEL_PATH_FEASIBILITY = os.path.join(os.path.dirname(__file__), '../modelo_feasibility.pkl')
+            model_feasibility = joblib.load(MODEL_PATH_FEASIBILITY)
             pdf_file = request.FILES.get("file")
             if not pdf_file:
                 return JsonResponse({"error": "No se subió ningún archivo."}, status=400)
-            # data = json.loads(request.body)
-            
+    
             with pdfplumber.open(pdf_file) as pdf:
                 text = ""
                 for page in pdf.pages:
                     text += page.extract_text() or ""
 
-            # Aquí parseas el texto para extraer las características
-            data = {
-                "desviacion_coste": 0.05,  # Extraído del texto
-                "desviacion_tiempo": 0.1,
-                "Indice_Riesgo": 0.8,
-                "Experiencia_Contratista": 5,
-                "Zona_Sismica": 1,
-                "Tipo_Suelo": 2,
-                "Disponibilidad_Materiales_Actual": 0.9,
-                "Turnos_Trabajo_Actual": 2
-            }
+        
 
-            # Extraer características relevantes para la predicción
-            features = pd.DataFrame([[
-                data["desviacion_coste"],
-                data["desviacion_tiempo"],
-                data["Indice_Riesgo"],
-                data["Experiencia_Contratista"],
-                data["Turnos_Trabajo_Actual"]
-            ]], columns=[
-                "desviacion_coste",
-                "desviacion_tiempo",
-                "Indice_Riesgo",
-                "Experiencia_Contratista",
-                "Turnos_Trabajo_Actual"
-            ])
+            print("ALMAGRO")
+            try:
+                data = {
+                    "desviacion_coste": 0.05,  
+                    "desviacion_tiempo": 0.1,
+                    "categoria_licitada": 5,
+                    "complejidad_general": 1,
+                    "categoria_licitada_Automatico": 1,
+                    "categoria_licitada_Balsa": 0,
+                    "categoria_licitada_Distribución": 0,
+                    "categoria_licitada_Infraestructura": 0,
+                    "categoria_licitada_Otros": 0,
+                    "categoria_licitada_Parques": 0,
+                    "categoria_licitada_Tanque": 0,
+                    "categoria_licitada_Tratamiento": 0,
+                    "complejidad_general_2": 0,
+                    "complejidad_general_3": 0,
+                }
 
-            print(modelo_viabilidad.feature_names_in_)
+                features = pd.DataFrame([[
+                    data["desviacion_coste"],
+                    data["desviacion_tiempo"],
+                    data["categoria_licitada_Automatico"],
+                    data["categoria_licitada_Balsa"],
+                    data["categoria_licitada_Distribución"],
+                    data["categoria_licitada_Infraestructura"],
+                    data["categoria_licitada_Otros"],
+                    data["categoria_licitada_Parques"],
+                    data["categoria_licitada_Tanque"],
+                    data["categoria_licitada_Tratamiento"],
+                    data["complejidad_general_2"],
+                    data["complejidad_general_3"],
+                ]], columns=[
+                    'desviacion_coste',
+                    'desviacion_tiempo',
+                    'categoria_licitada_Automático',
+                    'categoria_licitada_Balsa',
+                    'categoria_licitada_Distribución',
+                    'categoria_licitada_Infraestructura',
+                    'categoria_licitada_Otros',
+                    'categoria_licitada_Parques',
+                    'categoria_licitada_Tanque',
+                    'categoria_licitada_Tratamiento',
+                    'complejidad_general_2',
+                    'complejidad_general_3'
+                ])
+                feasibility_predict = model_feasibility.predict(features)[0]
+            except Exception as e:
+                print("Error:", str(e))
 
+            print("ALMAGRO")
             # Hacer la predicción con el modelo
-            viabilidad_predicha = modelo_viabilidad.predict(features)[0]
-            riesgo = "Alto" if data["Indice_Riesgo"] > 0.7 else "Moderado"
+            # feasibility_predict = model_feasibility.predict(features)[0]
 
+            print("ALMAGRO")
             response = {
-                "viabilidad": "Viable" if viabilidad_predicha == 1 else "No Viable",
+                "viabilidad": "Viable" if feasibility_predict == 1 else "No Viable",
                 "desviacion_coste": data["desviacion_coste"],
-                "desviacion_tiempo": data["desviacion_tiempo"],
-                "riesgo": riesgo
+                "desviacion_tiempo": data["desviacion_tiempo"]
             }
+            print("ALMAGRO")
         
             env = Environment(loader=FileSystemLoader('.'))
             html_analysis = chat_feasibility({"messages": [response]})
