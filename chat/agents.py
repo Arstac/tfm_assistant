@@ -416,14 +416,12 @@ Tu respuesta debe:
 2. Explicar por qué el proyecto es viable o no, con referencia a los factores clave.
 3. Proporcionar recomendaciones prácticas para mejorar la viabilidad del proyecto.
 4. Ofrecer comparaciones con proyectos similares en base a riesgos y costos.
-5. Generar graficos sobre los resultados y exponerlos
 
 Formato de Respuesta Esperado:
 - Un resumen de la evaluación del proyecto.
 - Factores que afectan la viabilidad.
 - Sugerencias concretas para mejorar la planificación.
 - Si aplica, ejemplos de casos similares y cómo se resolvieron.
-- Generacion de graficos sobre 
 """
 
     # Generamos el prompt con el contexto del sistema y los últimos mensajes
@@ -453,7 +451,6 @@ Formato de Respuesta Esperado:
 
     # Generar una respuesta usando el modelo de IA
     try:
-        
         response = chain.invoke({"messages": last_messages})
     except Exception as e:
         print(f"Error al invocar el modelo de lenguaje: {e}")
@@ -466,10 +463,79 @@ Formato de Respuesta Esperado:
     template = env.get_template("templates/informe_template.html")
 
     html_content = markdown.markdown(response.content)
-    print("ALMAGRO", html_content)
+   
     # Renderizar el HTML con los datos de la respuesta
     html_output = template.render(
         titulo="Informe de Viabilidad del Proyecto",
+        contenido=html_content
+    )
+
+    return html_output
+
+def chat_risk_analysis(state):
+    """
+    Función que analiza el riesgo de un proyecto de construcción
+    utilizando un modelo de lenguaje basado en IA y genera un informe en HTML.
+    """
+
+    system = """Eres un asistente virtual experto en análisis de riesgo de proyectos de construcción.
+Tu tarea es evaluar el nivel de riesgo basándote en las características del proyecto y los factores identificados.
+
+Los datos que tienes incluyen:
+- Nivel de riesgo (Alto / Moderado / Bajo).
+- Desviación en costos y tiempos.
+- Factores como zona sísmica, tipo de suelo, disponibilidad de materiales y experiencia del contratista.
+
+Tu respuesta debe:
+1. Analizar el nivel de riesgo del proyecto basándote en los datos proporcionados.
+2. Explicar por qué el proyecto tiene ese nivel de riesgo, con referencia a los factores clave.
+3. Proporcionar recomendaciones prácticas para mitigar los riesgos identificados.
+4. Ofrecer comparaciones con proyectos similares en base a riesgos y costos.
+
+Formato de Respuesta Esperado:
+- Un resumen de la evaluación del riesgo del proyecto.
+- Factores que afectan el nivel de riesgo.
+- Sugerencias concretas para mitigar los riesgos.
+- Si aplica, ejemplos de casos similares y cómo se gestionaron.
+"""
+
+    # Generamos el prompt con el contexto del sistema y los últimos mensajes
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", system),
+            MessagesPlaceholder(variable_name="messages"),
+        ]
+    )
+
+    # Cadena que conecta el prompt con el modelo de lenguaje
+    chain = prompt | llm.bind_tools(tools)
+
+    print("--------- ENTRANDO EN ANÁLISIS DE RIESGO ---------")
+    print("Mensajes recibidos: ", state["messages"])
+    print("--------------------------------------------------")
+
+    # Obtener los últimos mensajes del usuario
+    last_messages = state["messages"]
+
+    # Generar una respuesta usando el modelo de IA
+    try:
+        response = chain.invoke({"messages": last_messages})
+    except Exception as e:
+        print(f"Error al invocar el modelo de lenguaje: {e}")
+        return "Ocurrió un error al generar la respuesta del modelo de lenguaje."
+
+    print("Respuesta generada: ", response)
+
+    # Cargar la plantilla HTML para generar el informe
+    env = Environment(loader=FileSystemLoader('.'))
+    template = env.get_template("templates/informe_template.html")
+
+    # Convertir la respuesta en formato Markdown a HTML
+    html_content = markdown.markdown(response.content)
+
+    # Renderizar el HTML con los datos de la respuesta
+    html_output = template.render(
+        titulo="Informe de Análisis de Riesgo del Proyecto",
         contenido=html_content
     )
 

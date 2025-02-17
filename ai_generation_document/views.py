@@ -1,133 +1,91 @@
 from django.shortcuts import render
-from django.http import JsonResponse, HttpResponse
-from .models import Report, Budget
-from jinja2 import Template
+from django.http import JsonResponse
 import pdfkit
-import csv
-import json
 import numpy as np
 import joblib
 from jinja2 import Environment, FileSystemLoader
-from chat.agents import chat_feasibility, app, config
+from chat.agents import chat_feasibility
 from django.http import JsonResponse, FileResponse
 import os
 import pdfplumber
 import pandas as pd
 from weasyprint import HTML
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
+def generate_risk_report(request):
+    if request.method == "POST":
 
-def generate_report(request):
-    """Vista para generar un informe de proyecto."""
-    # Ejemplo de lógica para generación de informes
-    project_name = request.GET.get('project_name', 'Proyecto Desconocido')
-    report = Report.objects.create(
-        project_name=project_name,
-        total_cost=1000000,
-        risks_summary="Resumen de riesgos...",
-        viability="Viabilidad alta",
-    )
-    return JsonResponse({"message": "Informe generado", "report_id": report.id})
+        try:
+            MODEL_PATH_RISK = os.path.join(os.path.dirname(__file__), '../modelo_xgb_risk.pkl')
+            model_risk = joblib.load(MODEL_PATH_RISK)
+            pdf_file = request.FILES.get("file")
+            if not pdf_file:
+                return JsonResponse({"error": "No se subió ningún archivo."}, status=400)
 
-def generate_budget(request):
-    """Vista para generar un presupuesto de proyecto."""
-    project_name = request.GET.get('project_name', 'Proyecto Desconocido')
-    budget_item = Budget.objects.create(
-        project_name=project_name,
-        item="Cemento",
-        quantity=100,
-        unit_price=50.00,
-        total_price=5000.00
-    )
-    return JsonResponse({"message": "Presupuesto generado", "budget_id": budget_item.id})
+            # Aquí debes implementar la lógica para extraer las características relevantes del texto
+            # Por ejemplo, podrías utilizar expresiones regulares o técnicas de procesamiento de lenguaje natural
+            # Para este ejemplo, asumiremos que ya tienes un diccionario 'data' con las características extraídas
+            data = {
+                "beneficios_esperados": 4500,  # Ejemplo de valor extraído del texto
+                "duracion_plan": 120,          # Ejemplo de valor extraído del texto
+                "complejidad_general": "Media",# Ejemplo de valor extraído del texto
+                "sector_industria": "Construcción", # Ejemplo de valor extraído del texto
+                "categoria_licitada": "Infraestructura" # Ejemplo de valor extraído del texto
+            }
 
-def integrate_predictions_to_report(request):
-    """Genera un informe que incluye predicciones del modelo."""
-    project_name = request.GET.get('project_name', 'Proyecto Desconocido')
-    # Aquí se integrarían los resultados del modelo predictivo
-    model_results = {
-        "Costo_Final_Predicho": 1200000,
-        "Duracion_Real_Predicha": "14 meses",
-        "Riesgos_Identificados": "Alto riesgo por disponibilidad de materiales."
-    }
+            # Crear un DataFrame con los datos extraídos
+            input_df = pd.DataFrame([data])
 
-    report = Report.objects.create(
-        project_name=project_name,
-        total_cost=model_results["Costo_Final_Predicho"],
-        risks_summary=model_results["Riesgos_Identificados"],
-        viability="Moderada"
-    )
+            # Definir el preprocesador que se utilizó durante el entrenamiento
+            preprocesador = ColumnTransformer([
+                ('cat', OneHotEncoder(drop='first'), ['sector_industria', 'categoria_licitada']),
+                ('num', StandardScaler(), ['beneficios_esperados', 'duracion_plan'])
+            ])
 
-    return JsonResponse({
-        "message": "Informe generado con predicciones.",
-        "report_id": report.id,
-        "predicciones": model_results
-    })
+            # Aplicar las transformaciones al DataFrame de entrada
+            X_input = preprocesador.fit_transform(input_df)
 
-def integrate_predictions_to_budget(request):
-    """Genera un presupuesto que incluye datos basados en predicciones del modelo."""
-    project_name = request.GET.get('project_name', 'Proyecto Desconocido')
-    # Supongamos que los modelos predicen cantidades ajustadas
-    predicted_budget = [
-        {"item": "Cemento", "quantity": 110, "unit_price": 55, "total_price": 6050},
-        {"item": "Acero", "quantity": 220, "unit_price": 105, "total_price": 23100},
-    ]
+            # Realizar la predicción de riesgo
+            riesgo_predicho = model_risk.predict(X_input)[0]
+            probabilidad_riesgo = model_risk.predict_proba(X_input)[0][1]  # Probabilidad de riesgo alto
 
-    # Guardar en la base de datos y generar respuesta
-    for budget_item in predicted_budget:
-        Budget.objects.create(
-            project_name=project_name,
-            item=budget_item["item"],
-            quantity=budget_item["quantity"],
-            unit_price=budget_item["unit_price"],
-            total_price=budget_item["total_price"]
-        )
+            # Construir la respuesta
+            response = {
+                "riesgo": "Alto" if riesgo_predicho == 1 else "Bajo",
+                "probabilidad_riesgo": probabilidad_riesgo,
+                "beneficios_esperados": data["beneficios_esperados"],
+                "duracion_plan": data["duracion_plan"],
+                "complejidad_general": data["complejidad_general"],
+                "sector_industria": data["sector_industria"],
+                "categoria_licitada": data["categoria_licitada"]
+            }
 
-    return JsonResponse({
-        "message": "Presupuesto generado con predicciones.",
-        "project_name": project_name,
-        "predicciones": predicted_budget
-    })
+            # Generar el informe en HTML utilizando una plantilla
+            env = Environment(loader=FileSystemLoader('.'))
+            template = env.get_template("informe_template.html")
+            html_output = template.render(
+                titulo="Informe de Evaluación de Riesgo del Proyecto",
+                contenido=response
+            )
 
-def generate_report_pdf(request):
-    """Genera un informe en formato PDF basado en un reporte existente."""
-    report_id = request.GET.get('report_id')
-    report = Report.objects.filter(id=report_id).first()
+            # Convertir el HTML a PDF
+            pdf_path = "informe_riesgo.pdf"
+            try:
+                HTML(string=html_output).write_pdf(pdf_path)
+            except Exception as e:
+                print("Error al generar PDF:", str(e))
+                return JsonResponse({"error": str(e)}, status=500)
 
-    if not report:
-        return JsonResponse({"error": "Informe no encontrado."}, status=404)
+            # Retornar el PDF como respuesta
+            return FileResponse(open(pdf_path, 'rb'), content_type='application/pdf')
 
-    # Plantilla para PDF
-    template = Template('''
-        <h1>Informe del Proyecto</h1>
-        <h2>Datos Generales</h2>
-        <ul>
-          <li><strong>Nombre del Proyecto:</strong> {{ report.project_name }}</li>
-          <li><strong>Costo Total:</strong> {{ report.total_cost }}</li>
-          <li><strong>Resumen de Riesgos:</strong> {{ report.risks_summary }}</li>
-          <li><strong>Viabilidad:</strong> {{ report.viability }}</li>
-        </ul>
-    ''')
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
+    else:
+        return JsonResponse({"error": "Método no permitido"}, status=405)
 
-    rendered_html = template.render(report=report)
-
-    # Generar PDF con pdfkit
-    pdf = pdfkit.from_string(rendered_html, False)
-    response = HttpResponse(pdf, content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="Informe_{report.id}.pdf"'
-    return response
-
-def project_dashboard(request):
-    """Renderiza un panel para gestionar proyectos y visualizar predicciones."""
-    reports = Report.objects.all()
-    budgets = Budget.objects.all()
-    context = {
-        "reports": reports,
-        "budgets": budgets,
-    }
-    return render(request, "dashboard.html", context)
-
-
-def evaluate_feasibility(request):
+def generate_feasibility_report(request):
     if request.method == "POST":
 
         try:
@@ -142,9 +100,6 @@ def evaluate_feasibility(request):
                 for page in pdf.pages:
                     text += page.extract_text() or ""
 
-        
-
-            print("ALMAGRO")
             try:
                 data = {
                     "desviacion_coste": 0.05,  
@@ -194,22 +149,15 @@ def evaluate_feasibility(request):
             except Exception as e:
                 print("Error:", str(e))
 
-            print("ALMAGRO")
-            # Hacer la predicción con el modelo
-            # feasibility_predict = model_feasibility.predict(features)[0]
-
-            print("ALMAGRO")
             response = {
                 "viabilidad": "Viable" if feasibility_predict == 1 else "No Viable",
                 "desviacion_coste": data["desviacion_coste"],
                 "desviacion_tiempo": data["desviacion_tiempo"]
             }
-            print("ALMAGRO")
         
             env = Environment(loader=FileSystemLoader('.'))
             html_analysis = chat_feasibility({"messages": [response]})
 
-            # Generar el PDF
             pdf_path = "informe_viabilidad.pdf"
             try:
                 HTML(string=html_analysis).write_pdf(pdf_path)
