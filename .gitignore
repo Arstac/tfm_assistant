@@ -1,1 +1,4 @@
 node_modules
+
+extract_from_documents/utils/Data
+extract_from_documents/.env
