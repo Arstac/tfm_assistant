@@ -3,8 +3,7 @@ import pandas as pd
 from langgraph.graph import StateGraph, START, END
 
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-
-from markitdown import MarkItDown
+from tika import parser
 
 from modules.load_prompts import prompt_extraccion_materiales
 from .class_models import MatOutStr, State

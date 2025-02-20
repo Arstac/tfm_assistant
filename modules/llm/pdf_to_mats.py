@@ -4,7 +4,7 @@ from langgraph.graph import StateGraph, START, END
 
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-from markitdown import MarkItDown
+from tika import parser 
 
 from modules.load_prompts import prompt_extraccion_materiales
 from .class_models import MatOutStr, State
@@ -23,14 +23,8 @@ MAX_TOKENS = 500
 
 
 def convert_to_md(state: State):
-    md = MarkItDown()
-    result = md.convert(f"{state['doc']}")
-    #En state['doc'] se guarda el path del archivo pdf, quiero extraer el nombre del archivo para guardarlo en el estado
-    
-    
-    print(f"Length: {len(result.text_content)}")
-
-    return {"md_content": result.text_content}
+    result = parser.from_file(state['doc'])
+    return {"md_content": result['content']}	
 
 def mats_to_excel(state: State):
     """Converts the structured output of the material extraction process to an Excel file"""

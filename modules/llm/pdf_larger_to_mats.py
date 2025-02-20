@@ -4,7 +4,7 @@ from langgraph.graph import StateGraph, START, END
 
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-from markitdown import MarkItDown
+from tika import parser
 import time
 
 from modules.load_prompts import prompt_extraccion_materiales
@@ -32,12 +32,8 @@ text_splitter = RecursiveCharacterTextSplitter(
 
 
 def convert_to_md(state: State):
-    md = MarkItDown()
-    result = md.convert(f"{state['doc']}")
-    
-    print(f"Length: {len(result.text_content)}")
-
-    return {"md_content": result.text_content}
+    result = parser.from_file(state['doc'])
+    return {"md_content": result['content']}	
 
 def mats_to_excel(state: State):
     """Converts the structured output of the material extraction process to an Excel file"""

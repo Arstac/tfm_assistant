@@ -1,7 +1,7 @@
 from langgraph.graph import StateGraph, START, END
 
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from markitdown import MarkItDown
+from tika import parser 
 
 from modules.load_prompts import prompt_extraccion_datos
 from .class_models import OutStr, State
@@ -18,10 +18,8 @@ def get_current_step(state: State):
     return state["current_step"]
 
 def convert_to_md(state: State):
-    md = MarkItDown()
-    result = md.convert(f"{state['doc']}")
-
-    return {"md_content": result.text_content}
+    result = parser.from_file(state['doc'])
+    return {"md_content": result['content']}	
 
 
 def extraccion_datos(state: State):
@@ -38,7 +36,7 @@ def extraccion_datos(state: State):
     
     print(f"Response: {response.model_dump()}")
     
-    return {"DataInfo": response}
+    return {"DataInfo": response.model_dump()}
 
 graph = StateGraph(State)
 graph.add_node("convert_to_md", convert_to_md)
