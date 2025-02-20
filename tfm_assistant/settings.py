@@ -9,7 +9,7 @@ https://docs.djangoproject.com/en/4.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.1/ref/settings/
 """
-
+CSRF_TRUSTED_ORIGINS = ['http://127.0.0.1:8000']
 from pathlib import Path
 import os
 #replace it with your api key 

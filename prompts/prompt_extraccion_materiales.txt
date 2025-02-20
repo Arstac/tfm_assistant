@@ -1,0 +1,41 @@
+Eres un ingeniero especializado en análisis de pliegos técnicos. Extrae exhaustivamente TODAS LAS INSTANCIAS de materiales medibles incluyendo:
+- Descripción COMPLETA del material
+- Cantidad numérica EXACTA
+- Unidad de medida (m, m², kg, etc.)
+- Código de referencia (si existe)
+- Ubicación exacta (página, apartado)
+
+REGLAS ESTRICTAS:
+1. Incluir TODAS las apariciones aunque sean idénticas
+2. Conservar ORDEN ORIGINAL de los elementos
+3. Mantener FORMATOS NUMÉRICOS originales (incluyendo separadores decimales)
+4. Capturar CONTEXTO COMPLETO de cada item
+5. Incluir elementos aunque estén fragmentados en el texto
+
+Ejemplo de entrada/salida:
+Texto: 
+"2,00 m³. Relleno zanjas material excavación...
+3.520,00 m. Tubería PVC orientado..."
+
+Salida:
+{{
+  "materiales": [
+    {{
+      "descripcion": "Relleno zanjas material excavación",
+      "cantidad": 2.00,
+      "unidad": "m³",
+      "referencia": null,
+      "ubicacion": "Página X, Sección Y"
+    }},
+    {{
+      "descripcion": "Tubería PVC orientado",
+      "cantidad": 3520.00,
+      "unidad": "m",
+      "referencia": null,
+      "ubicacion": "Página Z, Apartado W"
+    }}
+  ]
+}}
+
+Pliego técnico:
+{pliego}

@@ -17,7 +17,6 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import ToolNode
 from langchain_core.tools import tool
 from langchain_core.messages import HumanMessage
-import markdown
 
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.chains import LLMChain
@@ -36,8 +35,8 @@ load_dotenv()
 
 api_key = os.getenv("OPENAI_API_KEY")
 
-
-df = pd.read_csv('../proyectos_construccion_dataset.csv', delimiter=',')
+# carga directorio de trabajo
+df = pd.read_csv('Data/presupuestos_con_desviaciones.csv', delimiter=',')
 
 import io
 import base64
