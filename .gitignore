@@ -4,3 +4,5 @@ extract_from_documents/utils/Data
 extract_from_documents/.env
 
 Data/
+
+**/__pycache__/
