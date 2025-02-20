@@ -23,6 +23,8 @@ from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.chains import LLMChain
 import openai
 from jinja2 import Environment, FileSystemLoader
+from io import BytesIO
+import base64
 
 
 # Define the state class
@@ -211,35 +213,35 @@ def generate_chart(chart_type: str, x_column: str, y_column: str = None) -> dict
 # PREDICT PRESUPUESTO REAL API
 ################################################################
 
-# @tool
-# def api_predict(features) -> float:
-#     """
-#     Chat function that makes an API call to a moodel to predict a response.
-#     Las features son:
-#     - feature_1: presupuesto_adjudicacion
-#     - feature_2: plazo_entrega_real
-#     - feature_3: plazo_entrega_adjudicacion
-#     """
-#     print("API FEATURES: ", features)
-#     url = "http://localhost:8000/predict/"
+@tool
+def api_predict(features) -> float:
+    """
+    Chat function that makes an API call to a moodel to predict a response.
+    Las features son:
+    - feature_1: presupuesto_adjudicacion
+    - feature_2: plazo_entrega_real
+    - feature_3: plazo_entrega_adjudicacion
+    """
+    print("API FEATURES: ", features)
+    url = "http://localhost:8000/predict/"
 
-#     payload = {"features": features}
-#     payload_str = json.dumps(payload, indent=4)
-#     headers = {
-#         "Content-Type": "application/json",
-#         "User-Agent": "insomnia/10.1.1",
-#         "Authorization": "Token d20eaaba74be7fe262fa6a997da0b6bd29091031"
-#     }
+    payload = {"features": features}
+    payload_str = json.dumps(payload, indent=4)
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "insomnia/10.1.1",
+        "Authorization": "Token d20eaaba74be7fe262fa6a997da0b6bd29091031"
+    }
 
-#     response = requests.request("POST", url, data=payload_str, headers=headers)
+    response = requests.request("POST", url, data=payload_str, headers=headers)
 
-#     print(response.text)
+    print(response.text)
     
-#     return response.json()["prediction"]
+    return response.json()["prediction"]
 
 
 # # Initialize the language model with the specified model name
-# llm = ChatOpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY)
+llm = ChatOpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY)
 
 # tools = [api_predict, csv_agent_as_tool, generate_chart]
 HEADERS = {
@@ -249,68 +251,68 @@ HEADERS = {
 }
 BASE_URL = "http://localhost:8000/predict/"  # Base URL para las predicciones
 
-@tool
-def api_predict_final_price(features) -> float:
-    """
-    Predice el Costo Final de un proyecto de construcción.
-    """
-    print("API FEATURES: ", features)
-    print("API FEATURES: ")
-    url = f"{BASE_URL}costo_final/"
-    return call_prediction_api(url, features)
+# @tool
+# def api_predict_final_price(features) -> float:
+#     """
+#     Predice el Costo Final de un proyecto de construcción.
+#     """
+#     print("API FEATURES: ", features)
+#     print("API FEATURES: ")
+#     url = f"{BASE_URL}costo_final/"
+#     return call_prediction_api(url, features)
 
-@tool
-def api_predict_customer_satisfaction(features) -> float:
-    """
-    Predice la Duración Real de un proyecto de construcción.
-    """
-    print("API FEATURES: ", features)
-    url = f"{BASE_URL}duracion_real/"
-    return call_prediction_api(url, features)
+# @tool
+# def api_predict_customer_satisfaction(features) -> float:
+#     """
+#     Predice la Duración Real de un proyecto de construcción.
+#     """
+#     print("API FEATURES: ", features)
+#     url = f"{BASE_URL}duracion_real/"
+#     return call_prediction_api(url, features)
 
-@tool
-def api_predict_customer_satisfaction(features) -> float:
-    """
-    Predice la Satisfacción del Cliente en un proyecto de construcción.
-    """
-    url = f"{BASE_URL}satisfaccion_cliente/"
-    return call_prediction_api(url, features)
+# @tool
+# def api_predict_customer_satisfaction(features) -> float:
+#     """
+#     Predice la Satisfacción del Cliente en un proyecto de construcción.
+#     """
+#     url = f"{BASE_URL}satisfaccion_cliente/"
+#     return call_prediction_api(url, features)
 
-@tool
-def api_predict_budget_deviation(features) -> float:
-    """
-    Predice la Desviación Presupuestaria en un proyecto de construcción.
-    """
-    url = f"{BASE_URL}desviacion_presupuestaria/"
-    return call_prediction_api(url, features)
+# @tool
+# def api_predict_budget_deviation(features) -> float:
+#     """
+#     Predice la Desviación Presupuestaria en un proyecto de construcción.
+#     """
+#     url = f"{BASE_URL}desviacion_presupuestaria/"
+#     return call_prediction_api(url, features)
 
-def call_prediction_api(url, features):
-    """
-    Realiza la llamada a la API de predicción y maneja errores.
-    """
-    print(f"🔍 Enviando solicitud a {url} con features: {features}")
+# def call_prediction_api(url, features):
+#     """
+#     Realiza la llamada a la API de predicción y maneja errores.
+#     """
+#     print(f"🔍 Enviando solicitud a {url} con features: {features}")
 
-    payload = {"features": features}
+#     payload = {"features": features}
 
-    try:
-        response = requests.post(url, json=payload, headers=HEADERS)
-        response_data = response.json()
+#     try:
+#         response = requests.post(url, json=payload, headers=HEADERS)
+#         response_data = response.json()
 
-        if response.status_code == 200:
-            print(f"✅ Predicción recibida: {response_data}")
-            return response_data
-        else:
-            print(f"⚠️ Error en la API ({response.status_code}): {response_data}")
-            return {"error": f"API Error ({response.status_code}): {response_data}"}
+#         if response.status_code == 200:
+#             print(f"✅ Predicción recibida: {response_data}")
+#             return response_data
+#         else:
+#             print(f"⚠️ Error en la API ({response.status_code}): {response_data}")
+#             return {"error": f"API Error ({response.status_code}): {response_data}"}
 
-    except requests.exceptions.RequestException as e:
-        print(f"🚨 Fallo en la conexión con la API: {str(e)}")
-        return {"error": f"Fallo en la conexión con la API: {str(e)}"}
+#     except requests.exceptions.RequestException as e:
+#         print(f"🚨 Fallo en la conexión con la API: {str(e)}")
+#         return {"error": f"Fallo en la conexión con la API: {str(e)}"}
     
-# # Initialize the language model with the specified model name
-llm = ChatOpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY)
+# # # Initialize the language model with the specified model name
+# llm = ChatOpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY)
 
-tools = [api_predict_final_price, api_predict_customer_satisfaction, api_predict_customer_satisfaction, api_predict_budget_deviation, call_prediction_api, generate_chart]
+tools = [api_predict, generate_chart]
 
 
 ################################################################
@@ -396,19 +398,17 @@ Herramientas del Asistente:
     # Return the response to the user
     return {"messages":response}
 
-def chat_feasibility(state):
+def chat_feasibility(state: State, buffer: BytesIO):
     """
     Función que analiza la viabilidad de un proyecto de construcción 
     utilizando un modelo de lenguaje basado en IA y genera un informe en HTML.
-    """
-
+    """ 
     system = """Eres un asistente virtual experto en análisis de viabilidad de proyectos de construcción. 
 Tu tarea es evaluar la viabilidad basándote en las características del proyecto y los riesgos identificados. 
 
 Los datos que tienes incluyen:
 - Viabilidad del proyecto (Viable / No Viable)
 - Desviación en costos y tiempos.
-- Nivel de riesgo (Alto / Moderado / Bajo).
 - Factores como zona sísmica, tipo de suelo, disponibilidad de materiales y experiencia del contratista.
 
 Tu respuesta debe:
@@ -422,8 +422,7 @@ Formato de Respuesta Esperado:
 - Factores que afectan la viabilidad.
 - Sugerencias concretas para mejorar la planificación.
 - Si aplica, ejemplos de casos similares y cómo se resolvieron.
-"""
-
+"""  
     # Generamos el prompt con el contexto del sistema y los últimos mensajes
     prompt = ChatPromptTemplate.from_messages(
         [
@@ -431,7 +430,7 @@ Formato de Respuesta Esperado:
             MessagesPlaceholder(variable_name="messages"),
         ]
     )
-
+    print("ALMAGRO")
     # Cadena que conecta el prompt con el modelo de lenguaje
     chain = prompt | llm.bind_tools(tools)
 
@@ -439,7 +438,7 @@ Formato de Respuesta Esperado:
     print("--------- ENTRANDO EN ANALISIS VIABILIDAD ---------")
     print("Mensajes recibidos: ", state["messages"])
     print("--------- --------------------------------- ---------")
-    
+    print("ALMAGRO")
     # Obtener los últimos mensajes del usuario
     last_messages = {
         'viabilidad': 'Viable',
@@ -448,7 +447,7 @@ Formato de Respuesta Esperado:
         'riesgo': 'Alto'
     }
     last_messages = ["'viabilidad': 'Viable','desviacion_coste': 0.05,'desviacion_tiempo': 0.1,'riesgo': 'Alto'"]
-
+  
     # Generar una respuesta usando el modelo de IA
     try:
         response = chain.invoke({"messages": last_messages})
@@ -459,17 +458,19 @@ Formato de Respuesta Esperado:
     print("Respuesta generada: ", response)
 
     # Cargar la plantilla HTML para generar el informe
-    env = Environment(loader=FileSystemLoader('.'))
-    template = env.get_template("templates/informe_template.html")
+    env = Environment(loader=FileSystemLoader('chat'))
+    template = env.get_template("templates/report_template.html")
 
     html_content = markdown.markdown(response.content)
-   
+
     # Renderizar el HTML con los datos de la respuesta
     html_output = template.render(
         titulo="Informe de Viabilidad del Proyecto",
-        contenido=html_content
+        contenido=html_content,
+        grafico_viabilidad = base64.b64encode(buffer.getvalue()).decode('utf-8')
     )
 
+    print("ALMI1")
     return html_output
 
 def chat_risk_analysis(state):
@@ -536,7 +537,8 @@ Formato de Respuesta Esperado:
     # Renderizar el HTML con los datos de la respuesta
     html_output = template.render(
         titulo="Informe de Análisis de Riesgo del Proyecto",
-        contenido=html_content
+        contenido=html_content,
+        grafico_riesgo=buffer.getvalue().hex()
     )
 
     return html_output

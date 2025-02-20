@@ -15,7 +15,7 @@ from langchain.chains import ConversationChain  # Chain to handle conversational
 from .agents import app, config
 from .models import ChatMessage, Conversation  # Importing the ChatMessage and Conversation models
 from rest_framework.response import Response
-from .ml_model import predict
+from .ml_model import predict, predict_cost
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -310,6 +310,29 @@ def evaluate_risk(request):
         return generate_risk_report(request)
     except Exception as e:
         return Response({"error": str(e)}, status=500)
+
+#Revisar si hay que pasar por el chat o por funciones directamente
+@api_view(["POST"])
+def predict_cost_overtime(request):
+    if request.method == 'POST':
+        try:
+            # Carga los datos enviados por el cliente
+            data = json.loads(request.body)
+            features = data.get('features')  # Debe ser una lista de características
+
+            if features is None or not isinstance(features, list):
+                return JsonResponse({'error': 'Invalid input. "features" should be a list.'}, status=400)
+
+            # Realiza la predicción
+            result = predict_cost(features)
+
+            # Devuelve la predicción como respuesta JSON
+            return JsonResponse({'prediction': result})
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+    return JsonResponse({'error': 'Only POST method is allowed.'}, status=405)
 
 
 class UploadPDFView(APIView):

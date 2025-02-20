@@ -12,6 +12,11 @@ import pandas as pd
 from weasyprint import HTML
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
+import matplotlib
+import matplotlib.pyplot as plt
+import seaborn as sns
+from io import BytesIO
+matplotlib.use('Agg')
 
 def generate_risk_report(request):
     if request.method == "POST":
@@ -44,7 +49,7 @@ def generate_risk_report(request):
             ])
 
             # Aplicar las transformaciones al DataFrame de entrada
-            X_input = preprocesador.fit_transform(input_df)
+            X_input = preprocesador.fit_transform(input_df) 
 
             # Realizar la predicción de riesgo
             riesgo_predicho = model_risk.predict(X_input)[0]
@@ -60,6 +65,18 @@ def generate_risk_report(request):
                 "sector_industria": data["sector_industria"],
                 "categoria_licitada": data["categoria_licitada"]
             }
+
+            plt.figure(figsize=(6, 4))
+            sns.histplot(df['riesgos'], bins=20, kde=True, color='orange', label='Histórico')
+            plt.axvline(x=probabilidad_riesgo[0], color='red', linestyle='--', label='Predicción Actual')
+            plt.title('Comparación del Riesgo Predicho con el Histórico')
+            plt.xlabel('Índice de Riesgo')
+            plt.ylabel('Frecuencia')
+            plt.legend()
+            buffer_riesgo = BytesIO()
+            plt.savefig(buffer_riesgo, format='png')
+            buffer_riesgo.seek(0)
+            plt.close()
 
             # Generar el informe en HTML utilizando una plantilla
             env = Environment(loader=FileSystemLoader('.'))
@@ -145,20 +162,43 @@ def generate_feasibility_report(request):
                     'complejidad_general_2',
                     'complejidad_general_3'
                 ])
-                feasibility_predict = model_feasibility.predict(features)[0]
+
+                feasibility_predict = model_feasibility.predict(features)
             except Exception as e:
                 print("Error:", str(e))
 
+            print("ALMAGRO12")
             response = {
-                "viabilidad": "Viable" if feasibility_predict == 1 else "No Viable",
+                "viabilidad": "Viable" if feasibility_predict[0] == 1 else "No Viable",
                 "desviacion_coste": data["desviacion_coste"],
                 "desviacion_tiempo": data["desviacion_tiempo"]
             }
-        
-            env = Environment(loader=FileSystemLoader('.'))
-            html_analysis = chat_feasibility({"messages": [response]})
+            
+            # Cargar dataset histórico
+            dataset_path = os.path.join(os.path.dirname(__file__), '../dataset.csv')
+            df = pd.read_csv(dataset_path)
+            print("ALMAGRO34")
+            try:
+                # Gráfico de viabilidad comparativa
+                plt.figure(figsize=(5, 3))
+                sns.countplot(x='viabilidad', hue='viabilidad', data=df, palette='viridis', legend=False)
+                plt.axhline(y=df['viabilidad'].value_counts().get(feasibility_predict[0], 0), color='red', linestyle='--', label='Predicción Actual')
+                plt.title('Comparación de Viabilidad con el Histórico')
+                plt.xlabel('Estado de Viabilidad')
+                plt.ylabel('Cantidad de Proyectos')
+                plt.legend()
+                buffer_viabilidad = BytesIO()
+                plt.savefig(buffer_viabilidad, format='png')
+                buffer_viabilidad.seek(0)
+                plt.close()
+            except Exception as e:
+                print("Error al generar PDF:", str(e))
 
+            html_analysis = chat_feasibility({"messages": [response]}, buffer_viabilidad)
+
+            print("ALMAGRO1")
             pdf_path = "informe_viabilidad.pdf"
+    
             try:
                 HTML(string=html_analysis).write_pdf(pdf_path)
             except Exception as e:
