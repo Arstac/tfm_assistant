@@ -1,5 +1,6 @@
-from typing import List
+from typing import List, Optional
 import json
+from pydantic import BaseModel, Field
 import requests
 import pandas as pd
 import os
@@ -23,8 +24,40 @@ from langchain.chains import LLMChain
 import openai
 from jinja2 import Environment, FileSystemLoader
 
-
+import numpy as np
+def convert_to_serializable(obj):
+    if isinstance(obj, np.generic):
+        return obj.item()  # Convert NumPy scalar to native Python scalar
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()  # Convert NumPy array to list
+    elif isinstance(obj, pd.DataFrame):
+        # Recursively convert DataFrame elements
+        return obj.applymap(convert_to_serializable).to_dict(orient='records')
+    elif isinstance(obj, pd.Series):
+        # Recursively convert Series elements
+        return obj.apply(convert_to_serializable).tolist()
+    elif isinstance(obj, pd.Index):
+        return obj.tolist()
+    elif isinstance(obj, pd.Timestamp):
+        return obj.isoformat()
+    elif isinstance(obj, pd.Timedelta):
+        return str(obj)
+    elif isinstance(obj, pd.Period):
+        return str(obj)
+    elif isinstance(obj, pd.api.extensions.ExtensionDtype):
+        return str(obj)
+    elif isinstance(obj, pd.api.extensions.ExtensionArray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        # Convert all keys to strings
+        return {str(k): convert_to_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple, set)):
+        return [convert_to_serializable(v) for v in obj]
+    else:
+        # Fallback: Convert to string if all else fails
+        return str(obj)
 # Define the state class
+
 class State(MessagesState):
     pass
 
@@ -56,40 +89,6 @@ def save_image_to_file(base64_content, file_path=None):
     # Devuelve la URL relativa
     return f"{settings.STATIC_URL}{file_path}"
 
-@tool
-def generate_histogram(column_name: str) -> str:
-    """
-    Genera un histograma de la columna especificada en el dataframe y retorna el path de la imagen codificada en base64.
-    """
-    import matplotlib
-    import matplotlib.pyplot as plt
-    matplotlib.use('Agg')
-
-    print("Generating histogram for column:", column_name)
-    try:
-        plt.figure(figsize=(10, 6))
-    except Exception as e:
-        print("Error: ", e)
-    print("Plotting histogram...")
-    
-    plt.hist(df[column_name].dropna(), bins=30, color='blue', alpha=0.7)
-    plt.title(f'Histograma de {column_name}')
-    plt.xlabel(column_name)
-    plt.ylabel('Frecuencia')
-    plt.grid(axis='y', alpha=0.75)
-    print("Saving histogram...")
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png')
-    buf.seek(0)
-    print("Encoding histogram image...")
-    image_base64 = base64.b64encode(buf.read()).decode('utf-8')
-    print("Histogram image encoded successfully.")
-    
-    img_path = save_image_to_file(image_base64)
-    
-    print("Image saved to: ", img_path)
-    return img_path
-
 ################################################################
 # CSV AGENT AS TOOL
 ################################################################
@@ -118,129 +117,107 @@ s = agent.as_tool(
 # Generate chart tool
 ################################################################
 
+class CodeOutputStructure(BaseModel):
+    """
+    Estructura de salida para el código generado por la función generate_chart.
+    """
+    chart_type: str = Field(description="Tipo de gráfico generado.")
+    x_column: str = Field(description="Columna del eje X.")
+    y_column: Optional[str] = Field(description="Columna del eje Y.")
+    code: str = Field(description="Código generado para generar el gráfico.")
 
 @tool
-def generate_chart(chart_type: str, x_column: str, y_column: str = None) -> dict:
+def generate_any_chart(chart_type: str, filepath_csv: str, x_column: str, y_column: str = None) -> dict:
     """
-    Genera gráficos basados en el tipo solicitado (histograma, dispersión, líneas, etc.) y las columnas especificadas.
-    Retorna un diccionario con los datos para un gráfico interactivo.
+    Generates a chart based on the specified chart type and columns.
+    """
+    prompt_generate_any_chart = """
+    You are an expert in Python code development.
+    You need to generate the code to create a {chart_type} chart based on the data in the file {filepath_csv}.
+    The chart should have {x_column} on the x-axis and {y_column} on the y-axis.
+    You should return the code to:
+    - Read the data from the CSV file.
+    - Generate the chart based on the specified chart type.
+    - Return the chart data as a dictionary.
+    - Never plot the chart, just generate the data. (NEVER use plt.show())
+    - Always import pandas as pd, numpy as np, matplotlib.pyplot as plt
     
-    Parámetros:
-    - chart_type: Tipo de gráfico ('histogram', 'scatter', 'line', etc.).
-    - x_column: Columna del eje X.
-    - y_column: Columna del eje Y (opcional, para gráficos como dispersión o líneas).
-    """
-    import matplotlib.pyplot as plt
-    import numpy as np
-
-    print(f"Generating {chart_type} for columns: {x_column} {f'vs {y_column}' if y_column else ''}")
-
-    if x_column not in df.columns or (y_column and y_column not in df.columns):
-        return {"error": f"Las columnas especificadas no existen: {x_column}, {y_column}"}
-
-    chart_data = {}
-
-    if chart_type == "histogram":
+    Code exaples:
+    <code>
+        if chart_type == "histogram":
         data = df[x_column].dropna()
         counts, bins = np.histogram(data, bins=30)
-        chart_data = {
+        chart_data = {{
             "x": bins[:-1].tolist(),
             "y": counts.tolist(),
             "type": "bar",
             "name": f"Histograma de {x_column}"
-        }
+        }}
 
-    elif chart_type == "scatter":
-        if y_column is None:
-            return {"error": "Se requiere una columna Y para gráficos de dispersión."}
-        x_data = df[x_column].dropna()
-        y_data = df[y_column].dropna()
-        chart_data = {
-            "x": x_data.tolist(),
-            "y": y_data.tolist(),
-            "type": "scatter",
-            "mode": "markers",
-            "name": f"{x_column} vs {y_column}"
-        }
+        if chart_type == "scatter":
+            if y_column is None:
+                return {{"error": "Se requiere una columna Y para gráficos de dispersión."}}
+            x_data = df[x_column].dropna()
+            y_data = df[y_column].dropna()
+            chart_data = {{
+                "x": x_data.tolist(),
+                "y": y_data.tolist(),
+                "type": "scatter",
+                "mode": "markers",
+                "name": f"{x_column} vs {y_column}"
+            }}
 
-    elif chart_type == "line":
-        if y_column is None:
-            return {"error": "Se requiere una columna Y para gráficos de líneas."}
-        x_data = df[x_column].dropna()
-        y_data = df[y_column].dropna()
-        chart_data = {
-            "x": x_data.tolist(),
-            "y": y_data.tolist(),
-            "type": "line",
-            "name": f"{x_column} vs {y_column}"
-        }
+        if chart_type == "line":
+            if y_column is None:
+                return {{"error": "Se requiere una columna Y para gráficos de líneas."}}
+            x_data = df[x_column].dropna()
+            y_data = df[y_column].dropna()
+            chart_data = {{
+                "x": x_data.tolist(),
+                "y": y_data.tolist(),
+                "type": "line",
+                "name": f"{x_column} vs {y_column}"
+            }}
+    </code>
+    """
+    print("Generating chart of type:", chart_type)
+    print("-----------------------------------")
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", prompt_generate_any_chart),
+            ("user", "Generate the chart."),
+        ]
+    )
+    
+    chain = prompt | llm.with_structured_output(CodeOutputStructure)
+    
+    response = chain.invoke({"chart_type": chart_type, "x_column": x_column, "y_column": y_column, "filepath_csv": filepath_csv})
+    
+    code = response.model_dump()['code']
+    print("Code response: ", code)
 
-    elif chart_type == "box":
-        if y_column is None:
-            return {"error": "Se requiere una columna Y para gráficos de caja."}
-        x_data = df[x_column].dropna()
-        y_data = df[y_column].dropna()
-        chart_data = {
-            "x": x_data.tolist(),
-            "y": y_data.tolist(),
-            "type": "box",
-            "name": f"{x_column} vs {y_column}"
-        }
+
+# Check execution
+    try:
+        namespace = {}
+        exec(code, namespace)
         
-    elif chart_type == "bar":
-        if y_column is None:
-            return {"error": "Se requiere una columna Y para gráficos de barras."}
-        x_data = df[x_column].dropna()
-        y_data = df[y_column].dropna()
-        chart_data = {
-            "x": x_data.tolist(),
-            "y": y_data.tolist(),
-            "type": "bar",
-            "name": f"{x_column} vs {y_column}"
-        }
+        chart_data = namespace.get('chart_data', None)
         
-    else:
-        return {"error": f"Tipo de gráfico no soportado: {chart_type}"}
+        chart_data = convert_to_serializable(chart_data)
+        
+        print("RESULTADO:", chart_data)
+        
+    except Exception as e:
+        print("---CODE BLOCK CHECK: FAILED---")
+        error_message = HumanMessage(content=f"Your solution failed the code execution test: {e}")
+        print("---ERROR MESSAGE---", error_message)
+        messages += [error_message]
+        return {"chart_data": {}, "title": "Error en la generación del gráfico"}
 
-    print(f"{chart_type} data generated successfully.")
     return {"chart_data": chart_data, "title": f"{chart_type.capitalize()} de {x_column} {f'vs {y_column}' if y_column else ''}"}
 
 
-################################################################
-# PREDICT PRESUPUESTO REAL API
-################################################################
-
-# @tool
-# def api_predict(features) -> float:
-#     """
-#     Chat function that makes an API call to a moodel to predict a response.
-#     Las features son:
-#     - feature_1: presupuesto_adjudicacion
-#     - feature_2: plazo_entrega_real
-#     - feature_3: plazo_entrega_adjudicacion
-#     """
-#     print("API FEATURES: ", features)
-#     url = "http://localhost:8000/predict/"
-
-#     payload = {"features": features}
-#     payload_str = json.dumps(payload, indent=4)
-#     headers = {
-#         "Content-Type": "application/json",
-#         "User-Agent": "insomnia/10.1.1",
-#         "Authorization": "Token d20eaaba74be7fe262fa6a997da0b6bd29091031"
-#     }
-
-#     response = requests.request("POST", url, data=payload_str, headers=headers)
-
-#     print(response.text)
-    
-#     return response.json()["prediction"]
-
-
-# # Initialize the language model with the specified model name
-# llm = ChatOpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY)
-
-# tools = [api_predict, csv_agent_as_tool, generate_chart]
 HEADERS = {
     "Content-Type": "application/json",
     "User-Agent": "LangChain-Predictor",
@@ -309,7 +286,7 @@ def call_prediction_api(url, features):
 # # Initialize the language model with the specified model name
 llm = ChatOpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY)
 
-tools = [api_predict_final_price, api_predict_customer_satisfaction, api_predict_customer_satisfaction, api_predict_budget_deviation, call_prediction_api, generate_chart]
+tools = [api_predict_final_price, api_predict_customer_satisfaction, api_predict_customer_satisfaction, api_predict_budget_deviation, call_prediction_api, generate_any_chart]
 
 
 ################################################################
@@ -322,7 +299,7 @@ def chat(state: State):
     """
     system = """Eres un asistente virtual especializado en la gestión de proyectos de construcción. 
 Tu propósito principal es ofrecer soporte inteligente a una empresa mediante la consulta de datos históricos de obras ejecutadas, la estimación de riesgos y desviaciones en presupuestos, y la recomendación de estrategias para optimizar la planificación y minimizar riesgos.
-Los datos se encuentran en el archivo: o2.csv.
+Los datos se encuentran en el directorio: "Data/presupuestos_con_desviaciones.csv".
 
 Dispones de una serie de funciones que puedes utilizar para resolver ciertas tareas:
 Herramientas del Asistente:
@@ -383,7 +360,7 @@ Herramientas del Asistente:
     chain = prompt | llm.bind_tools(tools)
     
     print("--------- ENTERTING CHAT NODE ---------")
-    print("Messages received: ", state["messages"])
+    # print("Messages received: ", state["messages"])
     print("--------- ------------------ ---------")
     
     # Get 2 last messages
