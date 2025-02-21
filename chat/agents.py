@@ -1,5 +1,6 @@
 from typing import List, Optional
 import json
+import markdown
 from pydantic import BaseModel, Field
 import requests
 import pandas as pd
@@ -25,6 +26,7 @@ import openai
 from jinja2 import Environment, FileSystemLoader
 
 import numpy as np
+
 def convert_to_serializable(obj):
     if isinstance(obj, np.generic):
         return obj.item()  # Convert NumPy scalar to native Python scalar
@@ -61,7 +63,6 @@ def convert_to_serializable(obj):
 class State(MessagesState):
     pass
 
-
 load_dotenv()
 
 api_key = os.getenv("OPENAI_API_KEY")
@@ -97,21 +98,6 @@ custom_suffix = """Instrucciones adicionales:
 Las columnas del dataframe son: 
 {dfcolumns}"""
 custom_suffix = custom_suffix.format(dfcolumns=df.columns)
-
-agent = create_pandas_dataframe_agent(
-    ChatOpenAI(temperature=0, model="gpt-4o-mini", api_key=api_key),
-    df,
-    verbose=True,
-    agent_type=AgentType.OPENAI_FUNCTIONS,
-    allow_dangerous_code=True,
-    suffix=custom_suffix,
-    include_df_in_prompt=True,
-)
-
-s = agent.as_tool(
-    name="csv_agent",
-    description="Agent for csv file",
-)
 
 ################################################################
 # Generate chart tool
@@ -217,6 +203,65 @@ def generate_any_chart(chart_type: str, filepath_csv: str, x_column: str, y_colu
 
     return {"chart_data": chart_data, "title": f"{chart_type.capitalize()} de {x_column} {f'vs {y_column}' if y_column else ''}"}
 
+@tool
+def code_tool(user_text: str) -> dict:
+    """
+    Generates code based on the user's input to obtain some data.
+    """
+    prompt_generate_any_chart = """
+    You are an expert in Python code development. You will need to generate code to obtain data from a CSV file based on the user's input.
+    The data is stored in the file {filepath_csv}.
+    Based on the user's input, you need to generate the code to obtain the data requested.
+    The user has asked the following question:
+    "{user_text}"
+    
+    You should return the code to:
+    - Read the data from the CSV file.
+    - Filter the data based on the user's input.
+    - Return the filtered data as a dictionary.
+    - If it is a chart, never plot the chart, just generate the data. (NEVER use plt.show())
+    - Always import pandas as pd, numpy as np, matplotlib.pyplot as plt
+    - Always save the dictionary with the data in a variable called 'result'
+    
+    """
+    print("-----------------------------------")
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", prompt_generate_any_chart),
+            ("user", "Generate the chart."),
+        ]
+    )
+    
+    chain = prompt | llm.with_structured_output(CodeOutputStructure)
+    
+    filepath_csv = "Data/presupuestos_con_desviaciones.csv"
+    
+    response = chain.invoke({"user_text": user_text, "filepath_csv": filepath_csv})
+    
+    code = response.model_dump()['code']
+    print("Code response: ", code)
+
+
+# Check execution
+    try:
+        namespace = {}
+        exec(code, namespace)
+        
+        result = namespace.get('result', None)
+        
+        result = convert_to_serializable(result)
+        
+        print("RESULTADO:", result)
+        
+    except Exception as e:
+        print("---CODE BLOCK CHECK: FAILED---")
+        error_message = HumanMessage(content=f"Your solution failed the code execution test: {e}")
+        print("---ERROR MESSAGE---", error_message)
+        messages += [error_message]
+        return {"chart_data": {}, "title": "Error en la generación del gráfico"}
+
+    return {"code": code, "result_execution": result}
+
 
 HEADERS = {
     "Content-Type": "application/json",
@@ -286,7 +331,7 @@ def call_prediction_api(url, features):
 # # Initialize the language model with the specified model name
 llm = ChatOpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY)
 
-tools = [api_predict_final_price, api_predict_customer_satisfaction, api_predict_customer_satisfaction, api_predict_budget_deviation, call_prediction_api, generate_any_chart]
+tools = [api_predict_final_price, api_predict_customer_satisfaction, api_predict_customer_satisfaction, api_predict_budget_deviation, call_prediction_api, generate_any_chart, code_tool]
 
 
 ################################################################
@@ -312,6 +357,7 @@ Herramientas del Asistente:
  
     2- csv_agent: agente para interactuar con un archivo csv. Puedes utilizarlo para realizar consultas.
     3- generate_chart: función que genera un gráfico interactivo basado en los datos del archivo csv. 
+    4- code_tool: herramienta que genera código Python para obtener datos de un archivo CSV. Usalo si tienes dudas sobre cómo obtener ciertos datos.
     
  Interacción:
 	1.	Entrada del Usuario:

@@ -19,9 +19,12 @@ configparser
 langgraph
 langchain
 langchain-openai
+Markdown
 langchain-core
 langchain-experimental
 tabulate
 xgboost
 category-encoders
 matplotlib
+tiktoken
+sentence-transformers
