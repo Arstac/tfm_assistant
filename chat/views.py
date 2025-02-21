@@ -15,7 +15,7 @@ from langchain.chains import ConversationChain  # Chain to handle conversational
 from .agents import app, config
 from .models import ChatMessage, Conversation  # Importing the ChatMessage and Conversation models
 from rest_framework.response import Response
-from .ml_model import predict, predict_cost
+from .ml_model import predict
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -23,10 +23,7 @@ from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
 import os
 import pandas as pd
-from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.parsers import MultiPartParser, FormParser
-from .utils.extract import extract_text_from_pdf, enhanced_segmenter, extract_data_with_regex
 from .utils.bert_qa import BERTQA  # Asumiendo que tienes esta clase en utils
 from ai_generation_document.views import generate_feasibility_report, generate_risk_report
 
@@ -297,46 +294,3 @@ def predict_view(request):
 
     return JsonResponse({'error': 'Only POST method is allowed.'}, status=405)
 
-@api_view(["POST"])
-def evaluate_feasibility(request):
-    try:
-        return generate_feasibility_report(request)
-    except Exception as e:
-        return Response({"error": str(e)}, status=500)
-
-@api_view(["POST"])
-def evaluate_risk(request):
-    try:
-        return generate_risk_report(request)
-    except Exception as e:
-        return Response({"error": str(e)}, status=500)
-
-#Revisar si hay que pasar por el chat o por funciones directamente
-@api_view(["POST"])
-def predict_cost_overtime(request):
-    if request.method == 'POST':
-        try:
-            # Carga los datos enviados por el cliente
-            data = json.loads(request.body)
-            features = data.get('features')  # Debe ser una lista de características
-
-            if features is None or not isinstance(features, list):
-                return JsonResponse({'error': 'Invalid input. "features" should be a list.'}, status=400)
-
-            # Realiza la predicción
-            result = predict_cost(features)
-
-            # Devuelve la predicción como respuesta JSON
-            return JsonResponse({'prediction': result})
-
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)
-
-    return JsonResponse({'error': 'Only POST method is allowed.'}, status=405)
-
-
-class UploadPDFView(APIView):
-    parser_classes = (MultiPartParser, FormParser)
-
-    def post(self, request, *args, **kwargs):
-        return generate_feasibility_report(request)

@@ -1,41 +1,37 @@
 import joblib
 import os
 import pandas as pd
+import numpy as np
+from django.http import JsonResponse
+from .class_model import CostVariance
 
-# Ruta al modelo guardado
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "modelos_entrenados_xgb.pkl")
+MODEL_PATH_COST = os.path.join(os.path.dirname(__file__), '../modelo_lstm.pkl')
 
-# Cargar el modelo con todas las predicciones
-resultados_cargados = joblib.load(MODEL_PATH)
+model_cost = joblib.load(MODEL_PATH_COST)
 
 FEATURE_NAMES = [
-        "desviacion_coste",  
-        "desviacion_tiempo",
-        "categoria_licitada",
-        "complejidad_general",
-        "categoria_licitada_Automatico",
-        "categoria_licitada_Balsa",
-        "categoria_licitada_Distribución",
-        "categoria_licitada_Infraestructura",
-        "categoria_licitada_Otros",
-        "categoria_licitada_Parques",
-        "categoria_licitada_Tanque",
-        "categoria_licitada_Tratamiento",
-        "complejidad_general_2",
-        "complejidad_general_3",
+        'sector_industria', 'segmento_cliente', 'importe_presupuestado_x', 'dias_ejecucion_real'
     ]
 
-def predict_costo_final(features):
+def predict_cost_variance(cost: CostVariance):
     """
     Predice el Costo Final del proyecto.
     """
-    data = resultados_cargados["Costo_Final"]
-    modelo, encoder, scaler = data["modelo"], data["encoder"], data["scaler"]
-    print("🚀 Features recibidas:", features)
-    print("📊 Columnas esperadas por StandardScaler:", scaler.feature_names_in_)
-    features_df = pd.DataFrame([features], columns=FEATURE_NAMES)   
+    input_data = np.array([
+            cost.importe_presupuestado_x,
+            cost.dias_ejecucion_real,
+            cost.sector_industria,
+            cost.segmento_cliente,
+        ]).reshape(1, -1)
+    
+     # Normalizar datos
+    features_scaled = model_cost.transform(input_data)
 
-    features_scaled = scaler.transform(features_df)
-    prediction = modelo.predict(features_scaled)
+    # Crear secuencia (LSTM necesita secuencias)
+    seq_length = 5  # La misma longitud usada en el entrenamiento
+    input_sequence = np.array([features_scaled] * seq_length).reshape(1, seq_length, cost.shape[1])
 
-    return prediction[0]
+        # Hacer la predicción
+    desviacion_predicha = model_cost.predict(input_sequence)[0][0]
+
+    return JsonResponse({"cost_variance": desviacion_predicha})

@@ -4,24 +4,19 @@ import requests
 import pandas as pd
 import os
 from dotenv import load_dotenv
-
 from django.conf import settings
-
 from langchain_openai import ChatOpenAI  # OpenAI language model integration with LangChain
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.agents.agent_types import AgentType
 from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
-
 from langgraph.graph import StateGraph, START, END,MessagesState
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import ToolNode
 from langchain_core.tools import tool
 from langchain_core.messages import HumanMessage
-
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.chains import LLMChain
 import openai
-from jinja2 import Environment, FileSystemLoader
 from io import BytesIO
 import base64
 
@@ -250,67 +245,6 @@ HEADERS = {
 }
 BASE_URL = "http://localhost:8000/predict/"  # Base URL para las predicciones
 
-# @tool
-# def api_predict_final_price(features) -> float:
-#     """
-#     Predice el Costo Final de un proyecto de construcción.
-#     """
-#     print("API FEATURES: ", features)
-#     print("API FEATURES: ")
-#     url = f"{BASE_URL}costo_final/"
-#     return call_prediction_api(url, features)
-
-# @tool
-# def api_predict_customer_satisfaction(features) -> float:
-#     """
-#     Predice la Duración Real de un proyecto de construcción.
-#     """
-#     print("API FEATURES: ", features)
-#     url = f"{BASE_URL}duracion_real/"
-#     return call_prediction_api(url, features)
-
-# @tool
-# def api_predict_customer_satisfaction(features) -> float:
-#     """
-#     Predice la Satisfacción del Cliente en un proyecto de construcción.
-#     """
-#     url = f"{BASE_URL}satisfaccion_cliente/"
-#     return call_prediction_api(url, features)
-
-# @tool
-# def api_predict_budget_deviation(features) -> float:
-#     """
-#     Predice la Desviación Presupuestaria en un proyecto de construcción.
-#     """
-#     url = f"{BASE_URL}desviacion_presupuestaria/"
-#     return call_prediction_api(url, features)
-
-# def call_prediction_api(url, features):
-#     """
-#     Realiza la llamada a la API de predicción y maneja errores.
-#     """
-#     print(f"🔍 Enviando solicitud a {url} con features: {features}")
-
-#     payload = {"features": features}
-
-#     try:
-#         response = requests.post(url, json=payload, headers=HEADERS)
-#         response_data = response.json()
-
-#         if response.status_code == 200:
-#             print(f"✅ Predicción recibida: {response_data}")
-#             return response_data
-#         else:
-#             print(f"⚠️ Error en la API ({response.status_code}): {response_data}")
-#             return {"error": f"API Error ({response.status_code}): {response_data}"}
-
-#     except requests.exceptions.RequestException as e:
-#         print(f"🚨 Fallo en la conexión con la API: {str(e)}")
-#         return {"error": f"Fallo en la conexión con la API: {str(e)}"}
-    
-# # # Initialize the language model with the specified model name
-# llm = ChatOpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY)
-
 tools = [api_predict, generate_chart]
 
 
@@ -396,152 +330,6 @@ Herramientas del Asistente:
     print("Response: ", response)
     # Return the response to the user
     return {"messages":response}
-
-def chat_feasibility(state: State, buffer: BytesIO):
-    """
-    Función que analiza la viabilidad de un proyecto de construcción 
-    utilizando un modelo de lenguaje basado en IA y genera un informe en HTML.
-    """ 
-    system = """Eres un asistente virtual experto en análisis de viabilidad de proyectos de construcción. 
-Tu tarea es evaluar la viabilidad basándote en las características del proyecto y los riesgos identificados. 
-
-Los datos que tienes incluyen:
-- Viabilidad del proyecto (Viable / No Viable)
-- Desviación en costos y tiempos.
-- Factores como zona sísmica, tipo de suelo, disponibilidad de materiales y experiencia del contratista.
-
-Tu respuesta debe:
-1. Analizar la viabilidad del proyecto basándote en los datos proporcionados.
-2. Explicar por qué el proyecto es viable o no, con referencia a los factores clave.
-3. Proporcionar recomendaciones prácticas para mejorar la viabilidad del proyecto.
-4. Ofrecer comparaciones con proyectos similares en base a riesgos y costos.
-
-Formato de Respuesta Esperado:
-- Un resumen de la evaluación del proyecto.
-- Factores que afectan la viabilidad.
-- Sugerencias concretas para mejorar la planificación.
-- Si aplica, ejemplos de casos similares y cómo se resolvieron.
-"""  
-    # Generamos el prompt con el contexto del sistema y los últimos mensajes
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", system),
-            MessagesPlaceholder(variable_name="messages"),
-        ]
-    )
-    print("ALMAGRO")
-    # Cadena que conecta el prompt con el modelo de lenguaje
-    chain = prompt | llm.bind_tools(tools)
-
-
-    print("--------- ENTRANDO EN ANALISIS VIABILIDAD ---------")
-    print("Mensajes recibidos: ", state["messages"])
-    print("--------- --------------------------------- ---------")
-    print("ALMAGRO")
-    # Obtener los últimos mensajes del usuario
-    last_messages = {
-        'viabilidad': 'Viable',
-        'desviacion_coste': 0.05,
-        'desviacion_tiempo': 0.1,
-        'riesgo': 'Alto'
-    }
-    last_messages = ["'viabilidad': 'Viable','desviacion_coste': 0.05,'desviacion_tiempo': 0.1,'riesgo': 'Alto'"]
-  
-    # Generar una respuesta usando el modelo de IA
-    try:
-        response = chain.invoke({"messages": last_messages})
-    except Exception as e:
-        print(f"Error al invocar el modelo de lenguaje: {e}")
-        return "Ocurrió un error al generar la respuesta del modelo de lenguaje."
-
-    print("Respuesta generada: ", response)
-
-    # Cargar la plantilla HTML para generar el informe
-    env = Environment(loader=FileSystemLoader('chat'))
-    template = env.get_template("templates/report_template.html")
-
-    html_content = markdown.markdown(response.content)
-
-    # Renderizar el HTML con los datos de la respuesta
-    html_output = template.render(
-        titulo="Informe de Viabilidad del Proyecto",
-        contenido=html_content,
-        grafico_viabilidad = base64.b64encode(buffer.getvalue()).decode('utf-8')
-    )
-
-    print("ALMI1")
-    return html_output
-
-def chat_risk_analysis(state):
-    """
-    Función que analiza el riesgo de un proyecto de construcción
-    utilizando un modelo de lenguaje basado en IA y genera un informe en HTML.
-    """
-
-    system = """Eres un asistente virtual experto en análisis de riesgo de proyectos de construcción.
-Tu tarea es evaluar el nivel de riesgo basándote en las características del proyecto y los factores identificados.
-
-Los datos que tienes incluyen:
-- Nivel de riesgo (Alto / Moderado / Bajo).
-- Desviación en costos y tiempos.
-- Factores como zona sísmica, tipo de suelo, disponibilidad de materiales y experiencia del contratista.
-
-Tu respuesta debe:
-1. Analizar el nivel de riesgo del proyecto basándote en los datos proporcionados.
-2. Explicar por qué el proyecto tiene ese nivel de riesgo, con referencia a los factores clave.
-3. Proporcionar recomendaciones prácticas para mitigar los riesgos identificados.
-4. Ofrecer comparaciones con proyectos similares en base a riesgos y costos.
-
-Formato de Respuesta Esperado:
-- Un resumen de la evaluación del riesgo del proyecto.
-- Factores que afectan el nivel de riesgo.
-- Sugerencias concretas para mitigar los riesgos.
-- Si aplica, ejemplos de casos similares y cómo se gestionaron.
-"""
-
-    # Generamos el prompt con el contexto del sistema y los últimos mensajes
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", system),
-            MessagesPlaceholder(variable_name="messages"),
-        ]
-    )
-
-    # Cadena que conecta el prompt con el modelo de lenguaje
-    chain = prompt | llm.bind_tools(tools)
-
-    print("--------- ENTRANDO EN ANÁLISIS DE RIESGO ---------")
-    print("Mensajes recibidos: ", state["messages"])
-    print("--------------------------------------------------")
-
-    # Obtener los últimos mensajes del usuario
-    last_messages = state["messages"]
-
-    # Generar una respuesta usando el modelo de IA
-    try:
-        response = chain.invoke({"messages": last_messages})
-    except Exception as e:
-        print(f"Error al invocar el modelo de lenguaje: {e}")
-        return "Ocurrió un error al generar la respuesta del modelo de lenguaje."
-
-    print("Respuesta generada: ", response)
-
-    # Cargar la plantilla HTML para generar el informe
-    env = Environment(loader=FileSystemLoader('.'))
-    template = env.get_template("templates/informe_template.html")
-
-    # Convertir la respuesta en formato Markdown a HTML
-    html_content = markdown.markdown(response.content)
-
-    # Renderizar el HTML con los datos de la respuesta
-    html_output = template.render(
-        titulo="Informe de Análisis de Riesgo del Proyecto",
-        contenido=html_content,
-        grafico_riesgo=buffer.getvalue().hex()
-    )
-
-    return html_output
-
 
 ################################################################
 # GRAPH
