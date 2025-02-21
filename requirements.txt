@@ -24,3 +24,4 @@ langchain-experimental
 tabulate
 xgboost
 category-encoders
+matplotlib
